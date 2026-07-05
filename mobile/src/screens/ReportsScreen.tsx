@@ -63,9 +63,9 @@ export function ReportsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(!personal && !householdReport);
       load();
-    }, [load])
+    }, [householdReport, load, personal])
   );
 
   const summary = useMemo(() => {

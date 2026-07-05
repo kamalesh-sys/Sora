@@ -54,9 +54,9 @@ export function CategoriesScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(categories.length === 0);
       load();
-    }, [load])
+    }, [categories.length, load])
   );
 
   const resetForm = () => {

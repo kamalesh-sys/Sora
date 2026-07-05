@@ -39,9 +39,9 @@ export function SettlementsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(settlements.length === 0);
       load();
-    }, [load])
+    }, [load, settlements.length])
   );
 
   const filteredRows = useMemo(

@@ -97,9 +97,9 @@ export function ExpensesScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(expenses.length === 0);
       load();
-    }, [load])
+    }, [expenses.length, load])
   );
 
   const total = useMemo(

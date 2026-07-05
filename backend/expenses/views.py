@@ -177,6 +177,37 @@ class PersonViewSet(viewsets.ModelViewSet):
         ).select_related("invited_by", "person").distinct().order_by("-created_at")
         return Response(PeopleInvitationSerializer(invitations, many=True, context={"request": request}).data)
 
+    @action(detail=False, methods=["get"], url_path="overview")
+    def overview(self, request):
+        people = list(self.get_queryset())
+        user_email = normalize_email(request.user.email)
+        invitations = (
+            PeopleInvitation.objects.filter(Q(invited_by=request.user) | Q(email=user_email))
+            .select_related("invited_by", "person")
+            .distinct()
+            .order_by("-created_at")
+        )
+        ledgers = {}
+        for person in people:
+            ledger = get_person_ledger(request.user, person)
+            ledgers[str(person.id)] = {
+                "total_owed_to_me": str(ledger["total_owed_to_me"]),
+                "total_i_owe": str(ledger["total_i_owe"]),
+                "settlements_count": ledger["settlements_count"],
+                "pending_balance": str(ledger["pending_balance"]),
+            }
+        return Response(
+            {
+                "people": PersonSerializer(people, many=True, context={"request": request}).data,
+                "invitations": PeopleInvitationSerializer(
+                    invitations,
+                    many=True,
+                    context={"request": request},
+                ).data,
+                "ledgers": ledgers,
+            }
+        )
+
     @action(detail=False, methods=["post"], url_path=r"invitations/(?P<invitation_id>[^/.]+)/cancel")
     def cancel_invitation(self, request, invitation_id=None):
         invitation = PeopleInvitation.objects.filter(id=invitation_id, invited_by=request.user).first()

@@ -224,6 +224,12 @@ export type PersonLedger = {
   pending_balance: string;
 };
 
+export type PeopleOverview = {
+  people: Person[];
+  invitations: PeopleInvitation[];
+  ledgers: Record<string, PersonLedger>;
+};
+
 export type HouseholdBalance = {
   share_id: number;
   user: number | null;

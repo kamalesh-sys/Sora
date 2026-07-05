@@ -38,9 +38,9 @@ export function HouseholdsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(households.length === 0);
       load();
-    }, [load])
+    }, [households.length, load])
   );
 
   const save = async () => {

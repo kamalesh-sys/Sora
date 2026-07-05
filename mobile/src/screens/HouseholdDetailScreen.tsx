@@ -67,9 +67,9 @@ export function HouseholdDetailScreen({ navigation, route }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(!household && !report);
       load();
-    }, [load])
+    }, [household, load, report])
   );
 
   const memberPersonIds = useMemo(

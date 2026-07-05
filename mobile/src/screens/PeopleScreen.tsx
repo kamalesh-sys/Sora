@@ -15,9 +15,7 @@ import {
   cancelInvitation,
   createPerson,
   declineInvitation,
-  getInvitations,
-  getPeople,
-  getPersonLedger,
+  getPeopleOverview,
   getPersonShareSummary,
   invitePerson,
 } from "../services/expenseApi";
@@ -86,19 +84,10 @@ export function PeopleScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [peopleRows, inviteRows] = await Promise.all([getPeople(), getInvitations()]);
-      const ledgerEntries = await Promise.all(
-        peopleRows.map(async (person) => {
-          try {
-            return [person.id, await getPersonLedger(person.id)] as const;
-          } catch {
-            return [person.id, emptyLedger] as const;
-          }
-        })
-      );
-      setPeople(peopleRows);
-      setInvitations(inviteRows);
-      setLedgers(Object.fromEntries(ledgerEntries));
+      const overview = await getPeopleOverview();
+      setPeople(overview.people);
+      setInvitations(overview.invitations);
+      setLedgers(overview.ledgers);
     } catch {
       setError("Could not load people.");
     } finally {
@@ -108,9 +97,9 @@ export function PeopleScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(people.length === 0);
       load();
-    }, [load])
+    }, [load, people.length])
   );
 
   const receivedInvites = useMemo(

@@ -15,6 +15,7 @@ import {
   MonthlySummary,
   PaymentMethod,
   PeopleInvitation,
+  PeopleOverview,
   Person,
   PersonLedger,
   RecurringBill,
@@ -22,7 +23,7 @@ import {
   Settlement,
   ShareSummary,
 } from "../types/api";
-import { client } from "./apiClient";
+import { cachedGet, client } from "./apiClient";
 
 export type ExpenseFilters = {
   month?: string;
@@ -41,7 +42,7 @@ function unpackList<T>(data: T[] | { results: T[] }): T[] {
 }
 
 export async function getCategories() {
-  const response = await client.get<ExpenseCategory[] | { results: ExpenseCategory[] }>("/categories/");
+  const response = await cachedGet<ExpenseCategory[] | { results: ExpenseCategory[] }>("/categories/");
   return unpackList(response.data);
 }
 
@@ -65,14 +66,14 @@ export async function seedDefaultCategories() {
 }
 
 export async function getExpenses(filters: ExpenseFilters = {}) {
-  const response = await client.get<Expense[] | { results: Expense[] }>("/expenses/", {
+  const response = await cachedGet<Expense[] | { results: Expense[] }>("/expenses/", {
     params: filters,
   });
   return unpackList(response.data);
 }
 
 export async function getExpense(id: number) {
-  const response = await client.get<Expense>(`/expenses/${id}/`);
+  const response = await cachedGet<Expense>(`/expenses/${id}/`);
   return response.data;
 }
 
@@ -91,21 +92,21 @@ export async function deleteExpense(id: number) {
 }
 
 export async function getMonthlySummary(month: string) {
-  const response = await client.get<MonthlySummary>("/reports/monthly-summary/", {
+  const response = await cachedGet<MonthlySummary>("/reports/monthly-summary/", {
     params: { month },
   });
   return response.data;
 }
 
 export async function getDashboardSummary(month: string, limit = 30) {
-  const response = await client.get<DashboardSummary>("/reports/dashboard-summary/", {
+  const response = await cachedGet<DashboardSummary>("/reports/dashboard-summary/", {
     params: { month, limit },
   });
   return response.data;
 }
 
 export async function getBudgets(month?: string) {
-  const response = await client.get<MonthlyBudget[] | { results: MonthlyBudget[] }>("/budgets/", {
+  const response = await cachedGet<MonthlyBudget[] | { results: MonthlyBudget[] }>("/budgets/", {
     params: month ? { month } : undefined,
   });
   return unpackList(response.data);
@@ -122,8 +123,13 @@ export async function updateBudget(id: number, payload: SaveBudgetPayload) {
 }
 
 export async function getPeople() {
-  const response = await client.get<Person[] | { results: Person[] }>("/people/");
+  const response = await cachedGet<Person[] | { results: Person[] }>("/people/");
   return unpackList(response.data);
+}
+
+export async function getPeopleOverview() {
+  const response = await cachedGet<PeopleOverview>("/people/overview/");
+  return response.data;
 }
 
 export async function createPerson(payload: Partial<Person> & { name: string }) {
@@ -146,7 +152,7 @@ export async function invitePerson(payload: { email: string; name?: string; rela
 }
 
 export async function getInvitations() {
-  const response = await client.get<PeopleInvitation[]>("/people/invitations/");
+  const response = await cachedGet<PeopleInvitation[]>("/people/invitations/");
   return response.data;
 }
 
@@ -171,24 +177,24 @@ export async function declineInvitation(id: number) {
 }
 
 export async function getPersonLedger(id: number) {
-  const response = await client.get<PersonLedger>(`/people/${id}/ledger/`);
+  const response = await cachedGet<PersonLedger>(`/people/${id}/ledger/`);
   return response.data;
 }
 
 export async function getPersonShareSummary(id: number, month?: string) {
-  const response = await client.get<ShareSummary>(`/people/${id}/share-summary/`, {
+  const response = await cachedGet<ShareSummary>(`/people/${id}/share-summary/`, {
     params: month ? { month } : undefined,
   });
   return response.data;
 }
 
 export async function getHouseholds() {
-  const response = await client.get<Household[] | { results: Household[] }>("/households/");
+  const response = await cachedGet<Household[] | { results: Household[] }>("/households/");
   return unpackList(response.data);
 }
 
 export async function getHousehold(id: number) {
-  const response = await client.get<Household>(`/households/${id}/`);
+  const response = await cachedGet<Household>(`/households/${id}/`);
   return response.data;
 }
 
@@ -207,7 +213,7 @@ export async function deleteHousehold(id: number) {
 }
 
 export async function getHouseholdMembers(id: number) {
-  const response = await client.get<HouseholdMember[]>(`/households/${id}/members/`);
+  const response = await cachedGet<HouseholdMember[]>(`/households/${id}/members/`);
   return response.data;
 }
 
@@ -230,26 +236,26 @@ export async function removeHouseholdMember(householdId: number, memberId: numbe
 }
 
 export async function getHouseholdBalances(id: number) {
-  const response = await client.get<HouseholdBalance[]>(`/households/${id}/balances/`);
+  const response = await cachedGet<HouseholdBalance[]>(`/households/${id}/balances/`);
   return response.data;
 }
 
 export async function getHouseholdReport(id: number, month: string) {
-  const response = await client.get<HouseholdMonthlyReport>(`/households/${id}/reports/monthly-summary/`, {
+  const response = await cachedGet<HouseholdMonthlyReport>(`/households/${id}/reports/monthly-summary/`, {
     params: { month },
   });
   return response.data;
 }
 
 export async function getHouseholdShareSummary(id: number, month: string) {
-  const response = await client.get<ShareSummary>(`/households/${id}/share-summary/`, {
+  const response = await cachedGet<ShareSummary>(`/households/${id}/share-summary/`, {
     params: { month },
   });
   return response.data;
 }
 
 export async function getCategoryBudgets(params?: { month?: string; household?: number }) {
-  const response = await client.get<CategoryBudget[] | { results: CategoryBudget[] }>("/category-budgets/", {
+  const response = await cachedGet<CategoryBudget[] | { results: CategoryBudget[] }>("/category-budgets/", {
     params,
   });
   return unpackList(response.data);
@@ -267,21 +273,21 @@ export async function saveCategoryBudget(payload: {
 }
 
 export async function getCategoryBudgetUsage(month: string) {
-  const response = await client.get<CategoryBudgetUsage>("/category-budgets/usage/", {
+  const response = await cachedGet<CategoryBudgetUsage>("/category-budgets/usage/", {
     params: { month },
   });
   return response.data;
 }
 
 export async function getHouseholdCategoryBudgetUsage(householdId: number, month: string) {
-  const response = await client.get<CategoryBudgetUsage>(`/households/${householdId}/category-budgets/usage/`, {
+  const response = await cachedGet<CategoryBudgetUsage>(`/households/${householdId}/category-budgets/usage/`, {
     params: { month },
   });
   return response.data;
 }
 
 export async function getRecurringBills() {
-  const response = await client.get<RecurringBill[] | { results: RecurringBill[] }>("/recurring-bills/");
+  const response = await cachedGet<RecurringBill[] | { results: RecurringBill[] }>("/recurring-bills/");
   return unpackList(response.data);
 }
 
@@ -300,18 +306,18 @@ export async function deleteRecurringBill(id: number) {
 }
 
 export async function getBillOccurrences() {
-  const response = await client.get<BillOccurrence[] | { results: BillOccurrence[] }>("/bill-occurrences/");
+  const response = await cachedGet<BillOccurrence[] | { results: BillOccurrence[] }>("/bill-occurrences/");
   return unpackList(response.data);
 }
 
 export async function getBillCalendar(month: string, householdId?: number) {
   if (householdId) {
-    const response = await client.get<BillOccurrence[]>(`/households/${householdId}/bill-calendar/`, {
+    const response = await cachedGet<BillOccurrence[]>(`/households/${householdId}/bill-calendar/`, {
       params: { month },
     });
     return response.data;
   }
-  const response = await client.get<BillOccurrence[]>("/bill-calendar/", { params: { month } });
+  const response = await cachedGet<BillOccurrence[]>("/bill-calendar/", { params: { month } });
   return response.data;
 }
 
@@ -330,7 +336,7 @@ export async function skipBillOccurrence(id: number) {
 }
 
 export async function getSettlements() {
-  const response = await client.get<Settlement[] | { results: Settlement[] }>("/settlements/");
+  const response = await cachedGet<Settlement[] | { results: Settlement[] }>("/settlements/");
   return unpackList(response.data);
 }
 
@@ -349,3 +355,4 @@ export async function cancelSettlement(id: number) {
   const response = await client.post<Settlement>(`/settlements/${id}/cancel/`);
   return response.data;
 }
+

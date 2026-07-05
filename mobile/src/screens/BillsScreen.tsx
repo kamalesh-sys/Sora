@@ -147,9 +147,9 @@ export function BillsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(bills.length === 0 && occurrences.length === 0);
       load();
-    }, [load])
+    }, [bills.length, load, occurrences.length])
   );
 
   const refresh = () => {
