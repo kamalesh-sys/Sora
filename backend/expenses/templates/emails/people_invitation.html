@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #111827;">
+    <h2>You have been invited to Sora Expense</h2>
+    <p>
+      {{ invitation.invited_by.email }} invited you to connect for shared expense tracking.
+    </p>
+    <p>
+      <a href="{{ invite_link }}" style="background: #2563eb; color: #ffffff; padding: 10px 14px; text-decoration: none; border-radius: 6px;">
+        Accept invitation
+      </a>
+    </p>
+    <p>This invitation expires in {{ ttl_days }} days.</p>
+  </body>
+</html>

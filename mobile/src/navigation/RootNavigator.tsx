@@ -1,0 +1,84 @@
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { StyleSheet, View } from "react-native";
+import { ActivityIndicator } from "react-native-paper";
+
+import { useAppSettings } from "../context/AppSettingsContext";
+import { useAuth } from "../context/AuthContext";
+import { AuthScreen } from "../screens/AuthScreen";
+import { BillsScreen } from "../screens/BillsScreen";
+import { CategoriesScreen } from "../screens/CategoriesScreen";
+import { DashboardScreen } from "../screens/DashboardScreen";
+import { ExpenseFormScreen } from "../screens/ExpenseFormScreen";
+import { ExpensesScreen } from "../screens/ExpensesScreen";
+import { HouseholdDetailScreen } from "../screens/HouseholdDetailScreen";
+import { HouseholdsScreen } from "../screens/HouseholdsScreen";
+import { PeopleScreen } from "../screens/PeopleScreen";
+import { ProfileScreen } from "../screens/ProfileScreen";
+import { ReportsScreen } from "../screens/ReportsScreen";
+import { SettlementsScreen } from "../screens/SettlementsScreen";
+
+export type RootStackParamList = {
+  Bills: undefined;
+  Categories: undefined;
+  ExpenseForm: { expenseId?: number } | undefined;
+  Expenses: undefined;
+  Home: undefined;
+  HouseholdDetail: { householdId: number };
+  Households: undefined;
+  People: undefined;
+  Profile: undefined;
+  Reports: undefined;
+  Settings: undefined;
+  Settlements: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+export function RootNavigator() {
+  const { initializing, user } = useAuth();
+  const { colors } = useAppSettings();
+
+  if (initializing) {
+    return (
+      <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        animation: "fade_from_bottom",
+        animationDuration: 140,
+        headerShown: false,
+      }}
+      initialRouteName="Home"
+    >
+      <Stack.Screen name="Home" component={DashboardScreen} />
+      <Stack.Screen name="Expenses" component={ExpensesScreen} />
+      <Stack.Screen name="ExpenseForm" component={ExpenseFormScreen} />
+      <Stack.Screen name="Categories" component={CategoriesScreen} />
+      <Stack.Screen name="Bills" component={BillsScreen} />
+      <Stack.Screen name="People" component={PeopleScreen} />
+      <Stack.Screen name="Households" component={HouseholdsScreen} />
+      <Stack.Screen name="HouseholdDetail" component={HouseholdDetailScreen} />
+      <Stack.Screen name="Reports" component={ReportsScreen} />
+      <Stack.Screen name="Settings" component={ProfileScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Settlements" component={SettlementsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingScreen: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+});

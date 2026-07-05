@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Sora Expense",
+    "slug": "sora-expense",
+    "version": "1.0.0",
+    "newArchEnabled": false,
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "soraexpense",
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.soraexpense.app",
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "SoraExpense",
+              "label": "Sora Expense",
+              "description": "Recent expense and quick add",
+              "minWidth": "300dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 5,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}

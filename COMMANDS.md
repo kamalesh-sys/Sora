@@ -1,0 +1,222 @@
+# Sora Expense Commands
+
+Run these commands from PowerShell on Windows.
+
+## Backend
+
+Start the Django backend:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
+```
+
+Run migrations:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py makemigrations
+.\.venv\Scripts\python.exe manage.py migrate
+```
+
+Check backend config:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py check
+```
+
+Create or refresh demo account:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py seed_demo_account
+```
+
+Demo login:
+
+```text
+Email: kamalesh.demo@test.com
+Password: SoraDemo@2026
+```
+
+## Mobile Dev
+
+Install packages:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npm install
+```
+
+Run TypeScript check:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npm run typecheck
+```
+
+Start Expo:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npx expo start
+```
+
+Run directly on USB-connected Android phone:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npx expo run:android
+```
+
+Backend API URL is here:
+
+```text
+D:\HouseExpenseTracker\mobile\src\config\api.ts
+```
+
+For phone testing, use your laptop Wi-Fi IP:
+
+```ts
+export const API_BASE_URL = "http://YOUR_LAPTOP_IP:8000/api";
+```
+
+## Android Setup
+
+Set Android SDK path for current terminal:
+
+```powershell
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
+```
+
+Check connected devices:
+
+```powershell
+adb devices
+```
+
+## Build APK
+
+Debug APK:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+.\gradlew clean
+.\gradlew assembleDebug
+```
+
+Debug APK output:
+
+```text
+D:\HouseExpenseTracker\mobile\android\app\build\outputs\apk\debug\app-debug.apk
+```
+
+Release APK:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+.\gradlew clean
+.\gradlew assembleRelease
+```
+
+Release APK output:
+
+```text
+D:\HouseExpenseTracker\mobile\android\app\build\outputs\apk\release\app-release.apk
+```
+
+Install release APK on connected phone:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+adb install -r app\build\outputs\apk\release\app-release.apk
+```
+
+## Clean Native Build Files
+
+Use this before a fresh Android build:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+.\gradlew clean
+Remove-Item -Recurse -Force .\app\build -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
+```
+
+## Live Android Logs
+
+Show filtered live logs:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
+
+adb logcat -v time | Select-String -Pattern "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|ReactNative|Expo|com.soraexpense|Exception|Error"
+```
+
+Save live logs to a text file:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
+
+$logFile="D:\HouseExpenseTracker\mobile\android\sora-crash-log.txt"
+
+adb logcat -c
+adb shell am force-stop com.soraexpense.app
+
+adb logcat -v time |
+  Tee-Object -FilePath $logFile |
+  Select-String -Pattern "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|ReactNative|Expo|com.soraexpense|Exception|Error"
+```
+
+Crash log file:
+
+```text
+D:\HouseExpenseTracker\mobile\android\sora-crash-log.txt
+```
+
+## Launch App From ADB
+
+```powershell
+adb shell monkey -p com.soraexpense.app 1
+```
+
+Force stop app:
+
+```powershell
+adb shell am force-stop com.soraexpense.app
+```
+
+Uninstall app:
+
+```powershell
+adb uninstall com.soraexpense.app
+```
+
+## Supabase / Hosted Backend
+
+After deploying the Django backend, update:
+
+```text
+D:\HouseExpenseTracker\mobile\src\config\api.ts
+```
+
+Example:
+
+```ts
+export const API_BASE_URL = "https://your-backend-domain.com/api";
+```
+
+Then rebuild the APK:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile\android
+.\gradlew clean
+.\gradlew assembleRelease
+adb install -r app\build\outputs\apk\release\app-release.apk
+```
