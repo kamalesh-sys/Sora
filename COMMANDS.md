@@ -271,3 +271,24 @@ $env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
 adb devices
 adb install -r app\build\outputs\apk\release\app-release.apk
 ```
+
+## Static APK Download Page
+
+Open the local download page:
+
+```powershell
+Start-Process D:\HouseExpenseTracker\docs\index.html
+```
+
+Refresh the APK used by the download page after a new release build:
+
+```powershell
+Copy-Item -LiteralPath D:\HouseExpenseTracker\mobile\android\app\build\outputs\apk\release\app-release.apk -Destination D:\HouseExpenseTracker\docs\downloads\sora-expense-latest.apk -Force
+Get-FileHash D:\HouseExpenseTracker\docs\downloads\sora-expense-latest.apk -Algorithm SHA256
+```
+
+Static site folder:
+
+```text
+D:\HouseExpenseTracker\docs
+```

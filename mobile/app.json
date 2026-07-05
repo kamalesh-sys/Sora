@@ -31,16 +31,17 @@
               "name": "SoraExpense",
               "label": "Sora Expense",
               "description": "Recent expense and quick add",
-              "minWidth": "300dp",
-              "minHeight": "110dp",
-              "targetCellWidth": 5,
+              "minWidth": "250dp",
+              "minHeight": "96dp",
+              "targetCellWidth": 4,
               "targetCellHeight": 2,
               "resizeMode": "horizontal|vertical",
               "updatePeriodMillis": 1800000
             }
           ]
         }
-      ]
+      ],
+      "expo-audio"
     ]
   }
 }

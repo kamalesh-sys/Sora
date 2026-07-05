@@ -8,6 +8,7 @@ import { Text, TextInput } from "react-native-paper";
 import { AppButton } from "../components/AppLayout";
 import { SoraCard, SoraCardSkeleton, SoraChip, SoraError, SoraHeader, SoraScreen } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
+import { useFeedback } from "../context/FeedbackContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
   createExpense,
@@ -64,6 +65,7 @@ function fromDateInputValue(value: string) {
 
 export function ExpenseFormScreen({ navigation, route }: Props) {
   const { colors } = useAppSettings();
+  const { success } = useFeedback();
   const expenseId = route.params?.expenseId;
   const isEditing = Boolean(expenseId);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -189,6 +191,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       } else {
         await createExpense(payload);
       }
+      success();
       void refreshWidgetFromLatestExpense();
       navigation.navigate("Expenses");
     } catch {

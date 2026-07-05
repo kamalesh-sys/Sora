@@ -143,7 +143,7 @@ export function ExpensesScreen({ navigation }: Props) {
   };
 
   return (
-    <SoraScreen bottomNavCurrent="Expenses" scroll={false}>
+    <SoraScreen bottomNavCurrent="Expenses" scroll={false} style={styles.screen}>
       <SoraHeader
         actionIcon={showExport ? "close" : "download-outline"}
         onAction={() => {
@@ -251,7 +251,8 @@ export function ExpensesScreen({ navigation }: Props) {
         keyExtractor={(item) => String(item.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        style={styles.list}
+        contentContainerStyle={[styles.listContent, expenses.length === 0 && styles.emptyListContent]}
         ListEmptyComponent={
           loading ? <SoraRowSkeleton rows={6} /> : <SoraEmpty text="No expenses found for this view." />
         }
@@ -283,6 +284,9 @@ function ExpenseRow({ expense, onPress }: { expense: Expense; onPress: () => voi
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    paddingBottom: 8,
+  },
   summaryCard: {
     alignItems: "center",
     flexDirection: "row",
@@ -330,6 +334,12 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 16,
+  },
+  emptyListContent: {
+    flexGrow: 1,
+  },
+  list: {
+    flex: 1,
   },
   expenseCard: {
     marginBottom: 10,

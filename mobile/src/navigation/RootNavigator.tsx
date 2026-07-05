@@ -1,8 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { StyleSheet, View } from "react-native";
-import { ActivityIndicator } from "react-native-paper";
+import { useEffect, useState } from "react";
 
-import { useAppSettings } from "../context/AppSettingsContext";
+import { StartupLoadingScreen } from "../components/StartupLoadingScreen";
 import { useAuth } from "../context/AuthContext";
 import { AuthScreen } from "../screens/AuthScreen";
 import { BillsScreen } from "../screens/BillsScreen";
@@ -36,14 +35,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   const { initializing, user } = useAuth();
-  const { colors } = useAppSettings();
+  const [minimumStartupDone, setMinimumStartupDone] = useState(false);
 
-  if (initializing) {
-    return (
-      <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+  useEffect(() => {
+    const timer = setTimeout(() => setMinimumStartupDone(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (initializing || !minimumStartupDone) {
+    return <StartupLoadingScreen />;
   }
 
   if (!user) {
@@ -74,11 +74,3 @@ export function RootNavigator() {
     </Stack.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingScreen: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-});

@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppSettingsProvider, useAppSettings } from "./src/context/AppSettingsContext";
 import { AuthProvider } from "./src/context/AuthContext";
+import { FeedbackProvider } from "./src/context/FeedbackContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/RootNavigator";
 
@@ -43,12 +44,14 @@ function AppShell() {
 
   return (
     <PaperProvider theme={paperTheme}>
-      <AuthProvider>
-        <NavigationContainer linking={linking}>
-          <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
-          <RootNavigator />
-        </NavigationContainer>
-      </AuthProvider>
+      <FeedbackProvider>
+        <AuthProvider>
+          <NavigationContainer linking={linking}>
+            <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
+            <RootNavigator />
+          </NavigationContainer>
+        </AuthProvider>
+      </FeedbackProvider>
     </PaperProvider>
   );
 }

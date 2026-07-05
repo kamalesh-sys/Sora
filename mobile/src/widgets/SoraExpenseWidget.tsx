@@ -36,12 +36,12 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
       style={{
         backgroundColor: colors.card,
         borderColor: colors.border,
-        borderRadius: 24,
+        borderRadius: 22,
         borderWidth: 1,
         flexDirection: "column",
         height: "match_parent",
         justifyContent: "space-between",
-        padding: 16,
+        padding: 12,
         width: "match_parent",
       }}
     >
@@ -49,7 +49,7 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
         <FlexWidget style={{ flex: 1, flexDirection: "column", paddingRight: 10 }}>
           <TextWidget
             maxLines={1}
-            style={{ color: colors.text, fontSize: 17, fontWeight: "800" }}
+            style={{ color: colors.text, fontSize: 16, fontWeight: "800" }}
             text="Sora Expense"
             truncate="END"
           />
@@ -66,10 +66,10 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
           style={{
             alignItems: "center",
             backgroundColor: colors.accent,
-            borderRadius: 22,
-            height: 44,
+            borderRadius: 20,
+            height: 40,
             justifyContent: "center",
-            width: 44,
+            width: 40,
           }}
         >
           <TextWidget
@@ -85,10 +85,10 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
           style={{
             alignItems: "center",
             backgroundColor: colors.soft,
-            borderRadius: 18,
+            borderRadius: 16,
             flexDirection: "row",
-            marginTop: 14,
-            padding: 12,
+            marginTop: 10,
+            padding: 10,
           }}
         >
           <FlexWidget style={{ flex: 1, flexDirection: "column", paddingRight: 10 }}>
@@ -107,7 +107,7 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
           </FlexWidget>
           <TextWidget
             maxLines={1}
-            style={{ color: colors.text, fontSize: 16, fontWeight: "800", textAlign: "right", width: 92 }}
+            style={{ color: colors.text, fontSize: 15, fontWeight: "800", textAlign: "right", width: 82 }}
             text={data.amount}
             truncate="END"
           />
@@ -116,10 +116,10 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
         <FlexWidget
           style={{
             backgroundColor: colors.soft,
-            borderRadius: 18,
+            borderRadius: 16,
             flexDirection: "column",
-            marginTop: 14,
-            padding: 12,
+            marginTop: 10,
+            padding: 10,
           }}
         >
           <TextWidget

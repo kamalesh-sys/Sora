@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "react-native-paper";
 
 import { useAppSettings } from "../context/AppSettingsContext";
+import { useFeedback } from "../context/FeedbackContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { useSoraResponsive } from "../theme/responsive";
 
@@ -84,6 +85,7 @@ function NavItemButton({
   responsive: ReturnType<typeof useSoraResponsive>;
 }) {
   const { colors } = useAppSettings();
+  const { navTap } = useFeedback();
   const scale = useRef(new Animated.Value(1)).current;
   const keyframe = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
@@ -152,6 +154,7 @@ function NavItemButton({
     <Pressable
       android_ripple={{ color: rippleColor, borderless: true }}
       onPress={() => {
+        navTap();
         playIconAnimation();
         setTimeout(onPress, 70);
       }}

@@ -9,7 +9,7 @@ import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import { useSoraResponsive } from "../theme/responsive";
 import { soraShadow } from "../theme/soraTheme";
-import AuthIllustration from "../../illustrations/person-working-on-laptop.svg";
+import AuthIllustration from "../../illustrations/character-running-with-kite.svg";
 import SoraLogo from "../assets/sora-logo.svg";
 
 type AuthMode = "login" | "signup";
