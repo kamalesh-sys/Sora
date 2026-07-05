@@ -161,6 +161,10 @@ Install release APK on connected phone:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+adb devices
 adb install -r app\build\outputs\apk\release\app-release.apk
 ```
 
@@ -185,8 +189,9 @@ Show filtered live logs:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
-$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
 
 adb logcat -v time | Select-String -Pattern "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|ReactNative|Expo|com.soraexpense|Exception|Error"
 ```
@@ -195,8 +200,9 @@ Save live logs to a text file:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
 $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
-$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
 
 $logFile="D:\HouseExpenseTracker\mobile\android\sora-crash-log.txt"
 
@@ -217,18 +223,24 @@ D:\HouseExpenseTracker\mobile\android\sora-crash-log.txt
 ## Launch App From ADB
 
 ```powershell
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
 adb shell monkey -p com.soraexpense.app 1
 ```
 
 Force stop app:
 
 ```powershell
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
 adb shell am force-stop com.soraexpense.app
 ```
 
 Uninstall app:
 
 ```powershell
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:ANDROID_HOME\platform-tools;$env:Path"
 adb uninstall com.soraexpense.app
 ```
 
@@ -250,7 +262,12 @@ Then rebuild the APK:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+.\gradlew --stop
 .\gradlew clean
 .\gradlew assembleRelease
+adb devices
 adb install -r app\build\outputs\apk\release\app-release.apk
 ```
