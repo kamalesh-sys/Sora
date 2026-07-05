@@ -1,5 +1,6 @@
-import { Children, ReactNode } from "react";
+import { Children, ReactNode, useEffect, useRef } from "react";
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -312,6 +313,99 @@ export function SoraError({ text }: { text?: string }) {
   return <Text style={[styles.errorText, { color: colors.danger }]}>{text}</Text>;
 }
 
+export function SoraSkeleton({
+  height,
+  radius = 12,
+  style,
+  width = "100%",
+}: {
+  height: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+  width?: number | `${number}%`;
+}) {
+  const { colors, themeMode } = useAppSettings();
+  const opacity = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          duration: 780,
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          duration: 780,
+          toValue: 0.45,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
+
+  const baseColor = themeMode === "dark" ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
+  const highlightColor = themeMode === "dark" ? "rgba(255,255,255,0.17)" : "rgba(15,23,42,0.13)";
+
+  return (
+    <Animated.View
+      style={[
+        {
+          backgroundColor: baseColor,
+          borderColor: colors.border,
+          borderRadius: radius,
+          height,
+          opacity,
+          overflow: "hidden",
+          width,
+        },
+        style,
+      ]}
+    >
+      <View style={[styles.skeletonHighlight, { backgroundColor: highlightColor }]} />
+    </Animated.View>
+  );
+}
+
+export function SoraRowSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <View>
+      {Array.from({ length: rows }).map((_, index) => (
+        <SoraCard key={index} style={styles.skeletonRowCard}>
+          <View style={styles.skeletonRow}>
+            <SoraSkeleton height={52} radius={26} style={styles.skeletonAvatar} width={52} />
+            <View style={styles.skeletonTextBlock}>
+              <SoraSkeleton height={16} radius={8} width="72%" />
+              <SoraSkeleton height={12} radius={6} style={styles.skeletonLineGap} width="52%" />
+            </View>
+            <SoraSkeleton height={18} radius={8} width={72} />
+          </View>
+        </SoraCard>
+      ))}
+    </View>
+  );
+}
+
+export function SoraCardSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <SoraCard>
+      <SoraSkeleton height={22} radius={9} width="54%" />
+      <SoraSkeleton height={12} radius={6} style={styles.skeletonLineGapLarge} width="86%" />
+      {Array.from({ length: rows }).map((_, index) => (
+        <SoraSkeleton
+          height={index === rows - 1 ? 38 : 14}
+          key={index}
+          radius={index === rows - 1 ? 14 : 7}
+          style={styles.skeletonLineGap}
+          width={index % 2 ? "64%" : "100%"}
+        />
+      ))}
+    </SoraCard>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -433,5 +527,32 @@ const styles = StyleSheet.create({
     color: soraPalette.red,
     fontSize: 14,
     marginBottom: 10,
+  },
+  skeletonAvatar: {
+    marginRight: 14,
+  },
+  skeletonHighlight: {
+    height: "100%",
+    opacity: 0.42,
+    transform: [{ translateX: -80 }, { skewX: "-18deg" }],
+    width: "42%",
+  },
+  skeletonLineGap: {
+    marginTop: 9,
+  },
+  skeletonLineGapLarge: {
+    marginTop: 14,
+  },
+  skeletonRow: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  skeletonRowCard: {
+    marginBottom: 10,
+    paddingVertical: 14,
+  },
+  skeletonTextBlock: {
+    flex: 1,
+    marginRight: 12,
   },
 });

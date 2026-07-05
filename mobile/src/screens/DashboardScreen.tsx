@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../components/BottomNav";
 import { SoraIllustratedEmpty } from "../components/SoraIllustratedEmpty";
+import { SoraRowSkeleton, SoraSkeleton } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
@@ -576,8 +577,9 @@ function SpendingCard({
           },
         ]}
       >
-        {loading ? "Loading" : formatCurrencyCompact(total)}
+        {loading ? "" : formatCurrencyCompact(total)}
       </Text>
+      {loading ? <SoraSkeleton height={44} radius={14} style={styles.spendingAmountSkeleton} width="48%" /> : null}
       <Text
         maxFontSizeMultiplier={responsive.maxFontScale}
         numberOfLines={1}
@@ -829,7 +831,9 @@ function RecentExpenses({
         </Pressable>
       </View>
 
-      {expenses.length ? (
+      {loading && !expenses.length ? (
+        <SoraRowSkeleton rows={3} />
+      ) : expenses.length ? (
         expenses.map((expense) => (
           <ExpenseRow
             expense={expense}
@@ -842,8 +846,8 @@ function RecentExpenses({
         <SoraIllustratedEmpty
           compact
           illustration={DashboardEmptyIllustration}
-          text={loading ? "Loading your latest expenses." : "Add your first expense to see recent spending here."}
-          title={loading ? "Loading expenses" : "No expenses this month"}
+          text="Add your first expense to see recent spending here."
+          title="No expenses this month"
         />
       )}
     </View>
@@ -1080,6 +1084,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     includeFontPadding: false,
     letterSpacing: 0,
+    zIndex: 2,
+  },
+  spendingAmountSkeleton: {
+    backgroundColor: "rgba(255,255,255,0.28)",
+    marginTop: 4,
     zIndex: 2,
   },
   comparisonText: {

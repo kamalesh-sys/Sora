@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, TextInput } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { createHousehold, getHouseholds } from "../services/expenseApi";
@@ -88,7 +88,7 @@ export function HouseholdsScreen({ navigation }: Props) {
       </SoraCard>
 
       <SoraSectionHeader title="Your Households" />
-      {households.length ? households.map((household) => (
+      {loading && !households.length ? <SoraRowSkeleton rows={4} /> : households.length ? households.map((household) => (
         <SoraCard key={household.id} style={styles.rowCard}>
           <SoraIconRow
             amount={household.monthly_budget ? formatCurrencyCompact(household.monthly_budget) : undefined}
@@ -100,7 +100,7 @@ export function HouseholdsScreen({ navigation }: Props) {
             title={household.name}
           />
         </SoraCard>
-      )) : <SoraEmpty text={loading ? "Loading households..." : "No households yet."} />}
+      )) : <SoraEmpty text="No households yet." />}
     </SoraScreen>
   );
 }

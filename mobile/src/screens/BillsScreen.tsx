@@ -8,7 +8,7 @@ import type { SvgProps } from "react-native-svg";
 
 import { AppButton } from "../components/AppLayout";
 import { SoraIllustratedEmpty } from "../components/SoraIllustratedEmpty";
-import { SoraCard, SoraChip, SoraError, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraError, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
@@ -615,13 +615,16 @@ function UpcomingTab({
   thisWeek: BillOccurrence[];
 }) {
   if (!overdue.length && !thisWeek.length && !later.length) {
+    if (loading) {
+      return <SoraRowSkeleton rows={4} />;
+    }
     return (
       <EmptyBillsState
         cta="Add recurring bill"
         illustration={BillsEmptyIllustration}
         onCta={onAdd}
-        text={loading ? "Loading bills..." : "Recurring bills will appear here when they are due."}
-        title={loading ? "Loading upcoming bills" : "No upcoming bills"}
+        text="Recurring bills will appear here when they are due."
+        title="No upcoming bills"
       />
     );
   }
@@ -686,15 +689,17 @@ function RecurringTab({
         <Text style={[styles.recurringSummaryTitle, { color: colors.text }]}>{activeCount} active recurring bills</Text>
         <Text style={[styles.recurringSummaryMeta, { color: colors.muted }]}>Monthly expected: {formatCurrencyCompact(monthlyExpected)}</Text>
       </SoraCard>
-      {bills.length ? (
+      {loading && !bills.length ? (
+        <SoraRowSkeleton rows={4} />
+      ) : bills.length ? (
         bills.map((bill) => <RecurringBillRow bill={bill} key={bill.id} onToggle={() => onToggle(bill)} />)
       ) : (
         <EmptyBillsState
           cta="Add your first bill"
           illustration={BillsEmptyIllustration}
           onCta={onAdd}
-          text={loading ? "Loading recurring bills..." : "Track rent, electricity, Wi-Fi, LPG, school fees, and subscriptions."}
-          title={loading ? "Loading recurring bills" : "No recurring bills"}
+          text="Track rent, electricity, Wi-Fi, LPG, school fees, and subscriptions."
+          title="No recurring bills"
         />
       )}
     </>
@@ -722,13 +727,15 @@ function HistoryTab({
           </SoraChip>
         ))}
       </ScrollView>
-      {occurrences.length ? (
+      {loading && !occurrences.length ? (
+        <SoraRowSkeleton rows={4} />
+      ) : occurrences.length ? (
         occurrences.map((occurrence) => <BillOccurrenceRow key={`history-${occurrence.id}`} occurrence={occurrence} />)
       ) : (
         <EmptyBillsState
           illustration={BillsHistoryIllustration}
-          text={loading ? "Loading bill history..." : "Paid bills will appear here."}
-          title={loading ? "Loading history" : "No bill history yet"}
+          text="Paid bills will appear here."
+          title="No bill history yet"
         />
       )}
     </>

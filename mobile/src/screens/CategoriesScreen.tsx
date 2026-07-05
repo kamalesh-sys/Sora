@@ -6,7 +6,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, TextInput } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraScreen } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { createCategory, deleteCategory, getCategories, seedDefaultCategories, updateCategory } from "../services/expenseApi";
@@ -193,7 +193,9 @@ export function CategoriesScreen({ navigation }: Props) {
         Seed Default Indian Household Categories
       </AppButton>
 
-      {categories.length ? (
+      {loading && !categories.length ? (
+        <SoraRowSkeleton rows={5} />
+      ) : categories.length ? (
         categories.map((category) => {
           const visual = getCategoryVisual(category.name, category.icon, category.color);
           return (
@@ -210,7 +212,7 @@ export function CategoriesScreen({ navigation }: Props) {
           );
         })
       ) : (
-        <SoraEmpty text={loading ? "Loading categories..." : "No categories yet."} />
+        <SoraEmpty text="No categories yet." />
       )}
     </SoraScreen>
   );

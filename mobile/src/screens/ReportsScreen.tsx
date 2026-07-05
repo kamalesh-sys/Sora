@@ -6,7 +6,7 @@ import { Text, TextInput } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
 import { SoraDonutChart } from "../components/SoraDonutChart";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
@@ -176,7 +176,7 @@ export function ReportsScreen({ navigation }: Props) {
       </SoraCard>
 
       <SoraSectionHeader title="Category Breakdown" />
-      {summary.categories.length ? summary.categories.map((row) => (
+      {loading && !summary.categories.length ? <SoraRowSkeleton rows={5} /> : summary.categories.length ? summary.categories.map((row) => (
         <SoraCard key={`${row.category_id}-${row.category_name}`} style={styles.rowCard}>
           <SoraIconRow
             amount={formatCurrencyCompact(row.total)}
@@ -187,7 +187,7 @@ export function ReportsScreen({ navigation }: Props) {
             title={row.category_name}
           />
         </SoraCard>
-      )) : <SoraEmpty text={loading ? "Loading report..." : "No report data yet."} />}
+      )) : <SoraEmpty text="No report data yet." />}
 
       {scope === "household" && householdReport?.pending_settlements.length ? (
         <>

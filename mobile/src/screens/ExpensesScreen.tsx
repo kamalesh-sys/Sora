@@ -12,6 +12,7 @@ import {
   SoraError,
   SoraHeader,
   SoraIconRow,
+  SoraRowSkeleton,
   SoraScreen,
 } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -252,7 +253,7 @@ export function ExpensesScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <SoraEmpty text={loading ? "Loading expenses..." : "No expenses found for this view."} />
+          loading ? <SoraRowSkeleton rows={6} /> : <SoraEmpty text="No expenses found for this view." />
         }
         renderItem={({ item }) => (
           <ExpenseRow expense={item} onPress={() => navigation.navigate("ExpenseForm", { expenseId: item.id })} />

@@ -6,7 +6,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, TextInput } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
@@ -317,7 +317,9 @@ export function PeopleScreen({ navigation }: Props) {
         <Text style={[styles.sectionCount, { color: colors.success }]}>({filteredPeople.length})</Text>
       </View>
 
-      {filteredPeople.length ? (
+      {loading && !filteredPeople.length ? (
+        <SoraRowSkeleton rows={5} />
+      ) : filteredPeople.length ? (
         <View style={styles.peopleList}>
           {filteredPeople.map((person) => (
             <PersonRow
@@ -329,7 +331,7 @@ export function PeopleScreen({ navigation }: Props) {
           ))}
         </View>
       ) : (
-        <SoraEmpty text={loading ? "Loading people..." : "No people found."} />
+        <SoraEmpty text="No people found." />
       )}
 
       {selectedPerson ? (

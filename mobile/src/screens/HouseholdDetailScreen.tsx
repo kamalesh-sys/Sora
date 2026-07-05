@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
@@ -177,7 +177,7 @@ export function HouseholdDetailScreen({ navigation, route }: Props) {
       </SoraCard>
 
       <SoraSectionHeader title="Balances" />
-      {balances.length ? balances.map((row) => (
+      {loading && !balances.length ? <SoraRowSkeleton rows={3} /> : balances.length ? balances.map((row) => (
         <SoraCard key={row.share_id} style={styles.rowCard}>
           <SoraIconRow
             amount={formatCurrencyCompact(row.pending_amount)}
@@ -195,7 +195,7 @@ export function HouseholdDetailScreen({ navigation, route }: Props) {
             </View>
           ) : null}
         </SoraCard>
-      )) : <SoraEmpty text={loading ? "Loading balances..." : "No pending balances."} />}
+      )) : <SoraEmpty text="No pending balances." />}
 
       <SoraSectionHeader title="Members" />
       {members.length ? members.map((member) => (
@@ -211,7 +211,7 @@ export function HouseholdDetailScreen({ navigation, route }: Props) {
       )) : <SoraEmpty text="No members found." />}
 
       <SoraSectionHeader title="Top Categories" />
-      {report?.category_breakdown.length ? report.category_breakdown.map((row) => (
+      {loading && !report?.category_breakdown.length ? <SoraRowSkeleton rows={4} /> : report?.category_breakdown.length ? report.category_breakdown.map((row) => (
         <SoraCard key={`${row.category_id}-${row.category_name}`} style={styles.rowCard}>
           <SoraIconRow
             amount={formatCurrencyCompact(row.total)}
@@ -222,7 +222,7 @@ export function HouseholdDetailScreen({ navigation, route }: Props) {
             title={row.category_name}
           />
         </SoraCard>
-      )) : <SoraEmpty text={loading ? "Loading report..." : "No category spending."} />}
+      )) : <SoraEmpty text="No category spending." />}
     </SoraScreen>
   );
 }

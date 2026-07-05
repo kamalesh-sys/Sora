@@ -6,7 +6,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, TextInput } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraError, SoraHeader, SoraScreen } from "../components/SoraUI";
+import { SoraCard, SoraCardSkeleton, SoraChip, SoraError, SoraHeader, SoraScreen } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
@@ -253,6 +253,14 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       />
       <SoraError text={error} />
 
+      {loading ? (
+        <>
+          <SoraCardSkeleton rows={3} />
+          <SoraCardSkeleton rows={5} />
+        </>
+      ) : (
+        <>
+
       <SoraCard>
         <Text style={[styles.amountLabel, { color: colors.text }]}>Amount</Text>
         <View style={[styles.amountBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
@@ -389,6 +397,8 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
           Delete Expense
         </AppButton>
       ) : null}
+        </>
+      )}
     </SoraScreen>
   );
 }

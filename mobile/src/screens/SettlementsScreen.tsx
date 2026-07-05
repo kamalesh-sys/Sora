@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text } from "react-native-paper";
 
 import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
+import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
 import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { cancelSettlement, getSettlements } from "../services/expenseApi";
@@ -93,7 +93,9 @@ export function SettlementsScreen({ navigation }: Props) {
       </ScrollView>
 
       <SoraSectionHeader title="History" />
-      {filteredRows.length ? (
+      {loading && !filteredRows.length ? (
+        <SoraRowSkeleton rows={4} />
+      ) : filteredRows.length ? (
         filteredRows.map((settlement) => (
           <SoraCard key={settlement.id} style={styles.rowCard}>
             <SoraIconRow
@@ -114,7 +116,7 @@ export function SettlementsScreen({ navigation }: Props) {
           </SoraCard>
         ))
       ) : (
-        <SoraEmpty text={loading ? "Loading settlements..." : "No settlements found."} />
+        <SoraEmpty text="No settlements found." />
       )}
 
       <SoraCard>
