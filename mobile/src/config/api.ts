@@ -1,1 +1,1 @@
-export const API_BASE_URL = "http://192.168.1.36:8000/api";
+export const API_BASE_URL = "https://sora-expense-backend.onrender.com/api";
