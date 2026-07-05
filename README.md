@@ -1,27 +1,32 @@
 # Sora Expense
 
-Track it. Know it.
+**Track it. Know it.**
 
-A simple Android app for house expenses, bills, budgets, and reports.
+A simple Android app for tracking house expenses, bills, budgets, and reports.
 
-## Download
+<br>
 
-Get the latest APK from the download page:
+<p align="left">
+  <a href="https://kamalesh-sys.github.io/Sora/">
+    <img src="https://img.shields.io/badge/Download%20APK-Sora%20Expense-2E7D32?style=for-the-badge&logo=android&logoColor=white" alt="Download Sora Expense APK">
+  </a>
+</p>
 
-```text
-docs/index.html
-```
+<br>
 
-## Stack
+## About
 
-- Django REST API
-- PostgreSQL
-- Expo React Native
-- Android APK
+Sora Expense helps you manage:
 
-## Notes
+* House expenses
+* Bills and recurring payments
+* Monthly budgets
+* Expense reports
+* CSV/PDF exports
 
-- Backend runs on Render.
-- App talks to the Django API only.
-- Secrets stay in environment variables.
+## Platform
+
+Currently available for:
+
+* Android
 
