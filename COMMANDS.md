@@ -84,6 +84,28 @@ export const API_BASE_URL = "http://YOUR_LAPTOP_IP:8000/api";
 
 ## Android Setup
 
+Use Android Studio's bundled JDK for Android builds. Do not use Java 26 for this project.
+
+Set Java and Android SDK paths for current terminal:
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+```
+
+Verify Java version:
+
+```powershell
+java -version
+```
+
+Expected result should be Java 21, similar to:
+
+```text
+openjdk version "21.0.10"
+```
+
 Set Android SDK path for current terminal:
 
 ```powershell
@@ -103,6 +125,10 @@ Debug APK:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+.\gradlew --stop
 .\gradlew clean
 .\gradlew assembleDebug
 ```
@@ -117,6 +143,10 @@ Release APK:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+.\gradlew --stop
 .\gradlew clean
 .\gradlew assembleRelease
 ```
@@ -140,6 +170,10 @@ Use this before a fresh Android build:
 
 ```powershell
 cd D:\HouseExpenseTracker\mobile\android
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
+.\gradlew --stop
 .\gradlew clean
 Remove-Item -Recurse -Force .\app\build -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
