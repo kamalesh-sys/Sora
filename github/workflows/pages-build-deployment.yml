@@ -1,0 +1,72 @@
+name: pages-build-deployment
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node (if applicable)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+        # Remove this step if your project does not use Node
+
+      - name: Install & Build (adjust to your project)
+        run: |
+          set -e
+          # Try common Node build flows; adapt for other stacks
+          if [ -f package.json ]; then
+            npm ci || true
+            npm run build || true
+          fi
+          # Add other build commands here (hugo, jekyll, etc.)
+
+      - name: Prepare Pages publish directory
+        run: |
+          set -e
+          # Ensure a clean ./public directory for upload
+          rm -rf ./public || true
+          mkdir -p ./public
+
+          # Detect common build output dirs and copy into ./public
+          if [ -d ./build ] && [ "$(ls -A ./build)" ]; then
+            echo "Using ./build as site output"
+            cp -a ./build/. ./public/
+          elif [ -d ./dist ] && [ "$(ls -A ./dist)" ]; then
+            echo "Using ./dist as site output"
+            cp -a ./dist/. ./public/
+          elif [ -d ./public ] && [ "$(ls -A ./public)" ]; then
+            echo "Using existing ./public as site output"
+          else
+            echo "No build output found in build/dist/public. If your site output path differs, update the workflow."
+          fi
+
+          echo "Contents of ./public (for debug)"
+          ls -la ./public || true
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./public
+
+  deploy:
+    needs: build_and_deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v1
