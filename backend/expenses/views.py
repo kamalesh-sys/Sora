@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
@@ -116,6 +118,12 @@ def _can_export_household_details(user, household):
             or member.visibility_level == HouseholdMember.VisibilityLevel.FULL_HOUSEHOLD
         )
     )
+
+
+def _previous_month(month_start):
+    if month_start.month == 1:
+        return date(month_start.year - 1, 12, 1)
+    return date(month_start.year, month_start.month - 1, 1)
 
 
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):
@@ -578,6 +586,41 @@ def monthly_summary(request):
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(get_monthly_report_data(start, end, user=request.user))
+
+
+@api_view(["GET"])
+def dashboard_summary(request):
+    try:
+        start, end = parse_month_range(request.query_params.get("month"))
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        limit = _parse_limit(request.query_params.get("limit", 30))
+    except ValidationError as exc:
+        return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+    previous_start = _previous_month(start)
+    previous_end = date(
+        previous_start.year,
+        previous_start.month,
+        parse_month_range(previous_start.strftime("%Y-%m"))[1].day,
+    )
+    recent_expenses = visible_expenses_for_user(request.user).filter(
+        expense_date__range=(start, end)
+    ).order_by("-expense_date", "-created_at")[:limit]
+
+    return Response(
+        {
+            "summary": get_monthly_report_data(start, end, user=request.user),
+            "previous_summary": get_monthly_report_data(previous_start, previous_end, user=request.user),
+            "recent_expenses": ExpenseSerializer(
+                recent_expenses,
+                many=True,
+                context={"request": request},
+            ).data,
+        }
+    )
 
 
 @api_view(["GET"])

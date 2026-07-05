@@ -193,6 +193,12 @@ export type MonthlySummary = {
   expense_count: number;
 };
 
+export type DashboardSummary = {
+  summary: MonthlySummary;
+  previous_summary: MonthlySummary;
+  recent_expenses: Expense[];
+};
+
 export type Settlement = {
   id: number;
   expense: number | null;

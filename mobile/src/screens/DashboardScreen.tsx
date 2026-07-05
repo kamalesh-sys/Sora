@@ -20,7 +20,7 @@ import { SoraIllustratedEmpty } from "../components/SoraIllustratedEmpty";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import { getExpenses, getMonthlySummary } from "../services/expenseApi";
+import { getDashboardSummary } from "../services/expenseApi";
 import {
   getCategoryVisual,
   soraPalette,
@@ -60,12 +60,6 @@ function sortExpenses(expenses: Expense[]) {
     const byDate = b.expense_date.localeCompare(a.expense_date);
     return byDate || b.created_at.localeCompare(a.created_at);
   });
-}
-
-function getPreviousMonth(value: string) {
-  const [year, month] = value.split("-").map(Number);
-  const date = new Date(year, month - 2, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function shiftMonth(value: string, offset: number) {
@@ -179,37 +173,34 @@ export function DashboardScreen({ navigation }: Props) {
   const [error, setError] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
   const entrance = useRef(new Animated.Value(0)).current;
+  const hasLoadedDashboard = useRef(false);
 
   const greeting = useMemo(() => getGreeting(), []);
   const displayName = getDisplayName(user?.first_name, user?.email);
-  const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
   const screenHorizontalPadding = responsive.dashboard.contentPaddingX;
   const maxContentWidth = responsive.maxContentWidth;
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const [summaryData, previousData, expensesData] = await Promise.all([
-        getMonthlySummary(month),
-        getMonthlySummary(previousMonth),
-        getExpenses({ month, ordering: "recent", limit: 30 }),
-      ]);
-      const sortedExpenses = sortExpenses(expensesData);
-      setSummary(summaryData);
-      setPreviousSummary(previousData);
+      const dashboardData = await getDashboardSummary(month, 30);
+      const sortedExpenses = sortExpenses(dashboardData.recent_expenses);
+      setSummary(dashboardData.summary);
+      setPreviousSummary(dashboardData.previous_summary);
       setExpenses(sortedExpenses);
       void updateSoraExpenseWidget(sortedExpenses[0] ?? null);
     } catch {
       setError("Could not load dashboard. Check backend connection.");
     } finally {
+      hasLoadedDashboard.current = true;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [month, previousMonth]);
+  }, [month]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      setLoading(!hasLoadedDashboard.current);
       load();
     }, [load])
   );

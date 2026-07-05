@@ -4,6 +4,7 @@ import {
   CategoryBudgetUsage,
   CreateCategoryPayload,
   CreateExpensePayload,
+  DashboardSummary,
   Expense,
   ExpenseCategory,
   Household,
@@ -92,6 +93,13 @@ export async function deleteExpense(id: number) {
 export async function getMonthlySummary(month: string) {
   const response = await client.get<MonthlySummary>("/reports/monthly-summary/", {
     params: { month },
+  });
+  return response.data;
+}
+
+export async function getDashboardSummary(month: string, limit = 30) {
+  const response = await client.get<DashboardSummary>("/reports/dashboard-summary/", {
+    params: { month, limit },
   });
   return response.data;
 }

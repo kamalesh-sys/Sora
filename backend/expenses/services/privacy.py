@@ -1,6 +1,6 @@
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 
-from expenses.models import Expense, Household, HouseholdMember, Person
+from expenses.models import Expense, ExpenseShare, Household, HouseholdMember, Person
 
 
 ACTIVE = HouseholdMember.Status.ACTIVE
@@ -101,7 +101,12 @@ def visible_expenses_for_user(user):
     household_ids = detailed_household_ids_for_user(user)
     return (
         Expense.objects.select_related("category", "household", "paid_by_user", "paid_by_person")
-        .prefetch_related("shares")
+        .prefetch_related(
+            Prefetch(
+                "shares",
+                queryset=ExpenseShare.objects.select_related("user", "person", "household_member"),
+            )
+        )
         .filter(
             Q(visibility=Expense.Visibility.PRIVATE, user=user)
             | Q(visibility=Expense.Visibility.PRIVATE, created_by=user)

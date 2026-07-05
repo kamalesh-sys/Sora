@@ -364,6 +364,13 @@ class Expense(models.Model):
 
     class Meta:
         ordering = ["-expense_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["user", "expense_date"]),
+            models.Index(fields=["household", "expense_date"]),
+            models.Index(fields=["category", "expense_date"]),
+            models.Index(fields=["payment_method", "expense_date"]),
+            models.Index(fields=["expense_type", "expense_date"]),
+        ]
 
     def __str__(self):
         return f"{self.title} - {self.amount}"
@@ -660,6 +667,11 @@ class RecurringBill(models.Model):
 
     class Meta:
         ordering = ["next_due_date", "name"]
+        indexes = [
+            models.Index(fields=["user", "next_due_date"]),
+            models.Index(fields=["household", "next_due_date"]),
+            models.Index(fields=["is_active", "next_due_date"]),
+        ]
         constraints = [
             models.CheckConstraint(
                 condition=(Q(user__isnull=False) & Q(household__isnull=True))
@@ -709,6 +721,10 @@ class BillOccurrence(models.Model):
 
     class Meta:
         ordering = ["due_date", "id"]
+        indexes = [
+            models.Index(fields=["due_date", "status"]),
+            models.Index(fields=["status", "due_date"]),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["recurring_bill", "due_date"],
