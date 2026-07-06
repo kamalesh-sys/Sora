@@ -33,47 +33,92 @@ function buildHtml(theme: "light" | "dark") {
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+
     <style>
       html, body {
         background: transparent;
         margin: 0;
-        min-height: 78px;
+        min-height: 96px;
         overflow: hidden;
       }
+
       body {
         align-items: center;
         display: flex;
         justify-content: center;
       }
+
+      #turnstile {
+        min-height: 70px;
+      }
     </style>
   </head>
+
   <body>
     <div id="turnstile"></div>
+
     <script>
       function send(payload) {
-        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(payload));
-      }
-      window.onload = function () {
-        if (!window.turnstile) {
-          send({ type: "error", error: "Turnstile did not load." });
-          return;
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(payload));
         }
-        window.turnstile.render("#turnstile", {
-          sitekey: "${TURNSTILE_SITE_KEY}",
-          theme: "${theme}",
-          callback: function(token) {
-            send({ type: "success", token: token });
-          },
-          "expired-callback": function() {
-            send({ type: "expired" });
-          },
-          "error-callback": function(error) {
-            send({ type: "error", error: String(error || "unknown") });
+      }
+
+      function renderTurnstile(attempt) {
+        try {
+          if (
+            !window.turnstile ||
+            typeof window.turnstile.render !== "function"
+          ) {
+            if (attempt >= 30) {
+              send({
+                type: "error",
+                error: "Turnstile script loaded but render is unavailable"
+              });
+              return;
+            }
+
+            setTimeout(function () {
+              renderTurnstile(attempt + 1);
+            }, 200);
+
+            return;
           }
-        });
+
+          window.turnstile.render("#turnstile", {
+            sitekey: "${TURNSTILE_SITE_KEY}",
+            theme: "${theme}",
+            callback: function(token) {
+              send({ type: "success", token: token });
+            },
+            "expired-callback": function() {
+              send({ type: "expired" });
+            },
+            "error-callback": function(error) {
+              send({
+                type: "error",
+                error: String(error || "unknown")
+              });
+            }
+          });
+        } catch (error) {
+          send({
+            type: "error",
+            error: String(error && error.message ? error.message : error)
+          });
+        }
+      }
+
+      window.onloadTurnstileCallback = function () {
+        renderTurnstile(0);
       };
     </script>
+
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstileCallback"
+      async
+      defer
+    ></script>
   </body>
 </html>`;
 }
@@ -96,7 +141,7 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
         return;
       }
       onToken("");
-      onError("Human verification failed to load. Try again.");
+      onError(payload.error ? `Human verification failed: ${payload.error}` : "Human verification failed to load. Try again.");
     } catch {
       onToken("");
       onError("Human verification failed. Try again.");
@@ -106,16 +151,28 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
   return (
     <View style={[styles.wrap, { borderColor: token ? colors.success : colors.border }]}>
       <WebView
-        key={`${themeMode}-${resetKey}`}
-        automaticallyAdjustContentInsets={false}
-        domStorageEnabled
-        javaScriptEnabled
-        onMessage={handleMessage}
-        originWhitelist={["https://*", "http://*", "about:blank"]}
-        scrollEnabled={false}
-        source={{ baseUrl, html }}
-        style={styles.webview}
-      />
+      key={`${themeMode}-${resetKey}`}
+      automaticallyAdjustContentInsets={false}
+      domStorageEnabled
+      javaScriptEnabled
+      sharedCookiesEnabled
+      thirdPartyCookiesEnabled
+      setSupportMultipleWindows={false}
+      mixedContentMode="compatibility"
+      onMessage={handleMessage}
+      onError={(event) => {
+        onToken("");
+        onError(`Human verification WebView error: ${event.nativeEvent.description}`);
+      }}
+      onHttpError={(event) => {
+        onToken("");
+        onError(`Human verification HTTP error: ${event.nativeEvent.statusCode}`);
+      }}
+      originWhitelist={["*"]}
+      scrollEnabled={false}
+      source={{ baseUrl, html }}
+      style={styles.webview}
+    />
       <Text style={[styles.status, { color: token ? colors.success : colors.muted }]}>
         {token ? "Human verification ready" : "Complete human verification"}
       </Text>
@@ -132,7 +189,7 @@ const styles = StyleSheet.create({
   },
   webview: {
     backgroundColor: "transparent",
-    height: 78,
+    height: 96,
     width: "100%",
   },
   wrap: {
