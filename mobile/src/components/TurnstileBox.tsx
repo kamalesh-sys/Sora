@@ -9,7 +9,8 @@ import { useAppSettings } from "../context/AppSettingsContext";
 type TurnstileMessage =
   | { type: "success"; token: string }
   | { type: "expired" }
-  | { type: "error"; error?: string };
+  | { type: "error"; error?: string }
+  | { type: "loaded" };
 
 type Props = {
   resetKey: number;
@@ -38,7 +39,7 @@ function buildHtml(theme: "light" | "dark") {
       html, body {
         background: transparent;
         margin: 0;
-        min-height: 96px;
+        min-height: 110px;
         overflow: hidden;
       }
 
@@ -48,14 +49,10 @@ function buildHtml(theme: "light" | "dark") {
         justify-content: center;
       }
 
-      #turnstile {
+      .cf-turnstile {
         min-height: 70px;
       }
     </style>
-  </head>
-
-  <body>
-    <div id="turnstile"></div>
 
     <script>
       function send(payload) {
@@ -64,58 +61,39 @@ function buildHtml(theme: "light" | "dark") {
         }
       }
 
-      function renderTurnstile(attempt) {
-        try {
-          if (
-            !window.turnstile ||
-            typeof window.turnstile.render !== "function"
-          ) {
-            if (attempt >= 30) {
-              send({
-                type: "error",
-                error: "Turnstile script loaded but render is unavailable"
-              });
-              return;
-            }
+      window.onTurnstileSuccess = function(token) {
+        send({ type: "success", token: token });
+      };
 
-            setTimeout(function () {
-              renderTurnstile(attempt + 1);
-            }, 200);
+      window.onTurnstileExpired = function() {
+        send({ type: "expired" });
+      };
 
-            return;
-          }
+      window.onTurnstileError = function(error) {
+        send({
+          type: "error",
+          error: String(error || "unknown")
+        });
+      };
 
-          window.turnstile.render("#turnstile", {
-            sitekey: "${TURNSTILE_SITE_KEY}",
-            theme: "${theme}",
-            callback: function(token) {
-              send({ type: "success", token: token });
-            },
-            "expired-callback": function() {
-              send({ type: "expired" });
-            },
-            "error-callback": function(error) {
-              send({
-                type: "error",
-                error: String(error || "unknown")
-              });
-            }
-          });
-        } catch (error) {
-          send({
-            type: "error",
-            error: String(error && error.message ? error.message : error)
-          });
-        }
-      }
-
-      window.onloadTurnstileCallback = function () {
-        renderTurnstile(0);
+      window.onloadTurnstile = function() {
+        send({ type: "loaded" });
       };
     </script>
+  </head>
+
+  <body>
+    <div
+      class="cf-turnstile"
+      data-sitekey="${TURNSTILE_SITE_KEY}"
+      data-theme="${theme}"
+      data-callback="onTurnstileSuccess"
+      data-expired-callback="onTurnstileExpired"
+      data-error-callback="onTurnstileError"
+    ></div>
 
     <script
-      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstileCallback"
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstile"
       async
       defer
     ></script>
@@ -131,17 +109,28 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
       const payload = JSON.parse(event.nativeEvent.data) as TurnstileMessage;
+
+      if (payload.type === "loaded") {
+        return;
+      }
+
       if (payload.type === "success") {
         onToken(payload.token);
         return;
       }
+
       if (payload.type === "expired") {
         onToken("");
         onError("Human verification expired. Try again.");
         return;
       }
+
       onToken("");
-      onError(payload.error ? `Human verification failed: ${payload.error}` : "Human verification failed to load. Try again.");
+      onError(
+        payload.error
+          ? `Human verification failed: ${payload.error}`
+          : "Human verification failed to load. Try again."
+      );
     } catch {
       onToken("");
       onError("Human verification failed. Try again.");
@@ -151,28 +140,29 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
   return (
     <View style={[styles.wrap, { borderColor: token ? colors.success : colors.border }]}>
       <WebView
-      key={`${themeMode}-${resetKey}`}
-      automaticallyAdjustContentInsets={false}
-      domStorageEnabled
-      javaScriptEnabled
-      sharedCookiesEnabled
-      thirdPartyCookiesEnabled
-      setSupportMultipleWindows={false}
-      mixedContentMode="compatibility"
-      onMessage={handleMessage}
-      onError={(event) => {
-        onToken("");
-        onError(`Human verification WebView error: ${event.nativeEvent.description}`);
-      }}
-      onHttpError={(event) => {
-        onToken("");
-        onError(`Human verification HTTP error: ${event.nativeEvent.statusCode}`);
-      }}
-      originWhitelist={["*"]}
-      scrollEnabled={false}
-      source={{ baseUrl, html }}
-      style={styles.webview}
-    />
+        key={`${themeMode}-${resetKey}`}
+        automaticallyAdjustContentInsets={false}
+        domStorageEnabled
+        javaScriptEnabled
+        sharedCookiesEnabled
+        thirdPartyCookiesEnabled
+        setSupportMultipleWindows={false}
+        mixedContentMode="compatibility"
+        onMessage={handleMessage}
+        onError={(event) => {
+          onToken("");
+          onError(`Human verification WebView error: ${event.nativeEvent.description}`);
+        }}
+        onHttpError={(event) => {
+          onToken("");
+          onError(`Human verification HTTP error: ${event.nativeEvent.statusCode}`);
+        }}
+        originWhitelist={["*"]}
+        scrollEnabled={false}
+        source={{ baseUrl, html }}
+        style={styles.webview}
+      />
+
       <Text style={[styles.status, { color: token ? colors.success : colors.muted }]}>
         {token ? "Human verification ready" : "Complete human verification"}
       </Text>
@@ -189,7 +179,7 @@ const styles = StyleSheet.create({
   },
   webview: {
     backgroundColor: "transparent",
-    height: 96,
+    height: 110,
     width: "100%",
   },
   wrap: {
