@@ -33,6 +33,7 @@ android/app/build/
 *.aab
 
 # Local machine files
+.vscode/
 local.properties
 .DS_Store
 Thumbs.db

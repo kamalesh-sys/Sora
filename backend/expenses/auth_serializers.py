@@ -15,13 +15,16 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(write_only=True, min_length=12)
     otp = serializers.CharField(write_only=True, min_length=6, max_length=6)
 
     def validate_email(self, value):
         email = value.strip().lower()
-        if User.objects.filter(email=email).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
+        if (
+            User.objects.filter(email=email).exists()
+            or User.objects.filter(username=email).exists()
+        ):
+            raise serializers.ValidationError("Unable to create an account with this email.")
         return email
 
     def validate_password(self, value):
@@ -42,10 +45,7 @@ class SignupOTPRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        email = value.strip().lower()
-        if User.objects.filter(email=email).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
-        return email
+        return value.strip().lower()
 
 
 class LoginSerializer(serializers.Serializer):

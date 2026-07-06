@@ -8,7 +8,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -20,6 +20,7 @@ from .auth_serializers import (
 )
 from .models import SignupOTP
 from .services.categories import seed_default_categories
+from .throttles import AuthRateThrottle, OTPRateThrottle
 
 
 User = get_user_model()
@@ -54,11 +55,19 @@ def _send_signup_otp_email(email, otp):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([OTPRateThrottle])
 def request_signup_otp(request):
     serializer = SignupOTPRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     email = serializer.validated_data["email"]
     now = timezone.now()
+    response_detail = "If this email can register, a verification code will be sent."
+
+    if (
+        User.objects.filter(email=email).exists()
+        or User.objects.filter(username=email).exists()
+    ):
+        return Response({"detail": response_detail})
 
     latest = SignupOTP.objects.filter(email=email, consumed_at__isnull=True).first()
     if latest and latest.created_at > now - timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS):
@@ -78,15 +87,16 @@ def request_signup_otp(request):
         _send_signup_otp_email(email, code)
     except Exception:
         return Response(
-            {"detail": "Could not send verification email. Check email settings."},
+            {"detail": "Could not process verification email right now."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    return Response({"detail": "Verification code sent."})
+    return Response({"detail": response_detail})
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -121,6 +131,7 @@ def register(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def login(request):
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)

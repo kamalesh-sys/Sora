@@ -165,9 +165,10 @@ class PersonViewSet(viewsets.ModelViewSet):
                 {"detail": "Could not send invitation email. Check email settings."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        data = PeopleInvitationSerializer(invitation).data
-        data["invite_token"] = invitation.raw_token
-        return Response(data, status=status.HTTP_201_CREATED)
+        return Response(
+            PeopleInvitationSerializer(invitation, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["get"], url_path="invitations")
     def invitations(self, request):

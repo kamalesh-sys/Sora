@@ -26,6 +26,20 @@ cd D:\HouseExpenseTracker\backend
 .\.venv\Scripts\python.exe manage.py check
 ```
 
+Check production security:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py check --deploy
+```
+
+Generate a strong Django `SECRET_KEY` for Render:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
 Create or refresh demo account:
 
 ```powershell
@@ -270,6 +284,34 @@ $env:Path="$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
 .\gradlew assembleRelease
 adb devices
 adb install -r app\build\outputs\apk\release\app-release.apk
+```
+
+Run Supabase RLS hardening migration:
+
+```powershell
+cd D:\HouseExpenseTracker\backend
+.\.venv\Scripts\python.exe manage.py migrate
+```
+
+Render production environment essentials:
+
+```env
+DEBUG=False
+ALLOWED_HOSTS=sora-expense-backend.onrender.com
+SECURE_SSL_REDIRECT=True
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+SECURE_HSTS_SECONDS=31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+SECURE_HSTS_PRELOAD=True
+CORS_ALLOW_ALL_ORIGINS=False
+CSRF_TRUSTED_ORIGINS=https://sora-expense-backend.onrender.com
+```
+
+More detail:
+
+```text
+D:\HouseExpenseTracker\SECURITY.md
 ```
 
 ## Static APK Download Page
