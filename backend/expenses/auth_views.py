@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import timedelta
 
@@ -24,6 +25,7 @@ from .throttles import AuthRateThrottle, OTPRateThrottle
 
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 OTP_TTL_MINUTES = 10
 OTP_RESEND_COOLDOWN_SECONDS = 60
 OTP_MAX_ATTEMPTS = 5
@@ -86,6 +88,7 @@ def request_signup_otp(request):
     try:
         _send_signup_otp_email(email, code)
     except Exception:
+        logger.exception("Signup OTP email failed for %s", email)
         return Response(
             {"detail": "Could not process verification email right now."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
