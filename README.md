@@ -1,7 +1,5 @@
 # Sora Expense
 
-**Track it. Know it.**
-
 A simple Android app for tracking house expenses, bills, budgets, and reports.
 
 <br>
