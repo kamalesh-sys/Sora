@@ -331,9 +331,19 @@ EMAIL_TIMEOUT=15
 EMAIL_PROVIDER=resend
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=Sora Expense <onboarding@resend.dev>
+TURNSTILE_REQUIRED=True
+TURNSTILE_SECRET_KEY=
+TURNSTILE_TIMEOUT=10
 WEB_CONCURRENCY=2
 GUNICORN_THREADS=2
 GUNICORN_TIMEOUT=60
+```
+
+Cloudflare Turnstile mobile build site key:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+$env:EXPO_PUBLIC_TURNSTILE_SITE_KEY="your_turnstile_site_key"
 ```
 
 More detail:

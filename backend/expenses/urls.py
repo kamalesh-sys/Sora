@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .auth_views import login, logout, me, register, request_signup_otp
+from .auth_views import login, logout, me, register
 from .views import (
     BillOccurrenceViewSet,
     CategoryBudgetViewSet,
@@ -31,7 +31,6 @@ router.register("recurring-bills", RecurringBillViewSet, basename="recurring-bil
 router.register("bill-occurrences", BillOccurrenceViewSet, basename="bill-occurrence")
 
 urlpatterns = [
-    path("auth/request-signup-otp/", request_signup_otp, name="auth-request-signup-otp"),
     path("auth/register/", register, name="auth-register"),
     path("auth/login/", login, name="auth-login"),
     path("auth/me/", me, name="auth-me"),

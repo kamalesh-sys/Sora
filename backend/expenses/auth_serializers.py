@@ -16,7 +16,6 @@ class RegisterSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=12)
-    otp = serializers.CharField(write_only=True, min_length=6, max_length=6)
 
     def validate_email(self, value):
         email = value.strip().lower()
@@ -39,13 +38,6 @@ class RegisterSerializer(serializers.Serializer):
             password=validated_data["password"],
             first_name=validated_data.get("name", "").strip(),
         )
-
-
-class SignupOTPRequestSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-
-    def validate_email(self, value):
-        return value.strip().lower()
 
 
 class LoginSerializer(serializers.Serializer):

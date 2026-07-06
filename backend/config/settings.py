@@ -201,6 +201,13 @@ DEFAULT_FROM_EMAIL = config(
 FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="soraexpense://")
 RESEND_API_KEY = config("RESEND_API_KEY", default="")
 RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default=DEFAULT_FROM_EMAIL)
+TURNSTILE_REQUIRED = config("TURNSTILE_REQUIRED", default=not DEBUG, cast=bool)
+TURNSTILE_SECRET_KEY = config("TURNSTILE_SECRET_KEY", default="")
+TURNSTILE_VERIFY_URL = config(
+    "TURNSTILE_VERIFY_URL",
+    default="https://challenges.cloudflare.com/turnstile/v0/siteverify",
+)
+TURNSTILE_TIMEOUT = config("TURNSTILE_TIMEOUT", default=10, cast=int)
 
 LOGGING = {
     "version": 1,

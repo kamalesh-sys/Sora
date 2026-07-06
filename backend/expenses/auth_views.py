@@ -1,11 +1,6 @@
 import logging
-import secrets
-from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import check_password, make_password
-from django.template.loader import render_to_string
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -15,20 +10,19 @@ from rest_framework.response import Response
 from .auth_serializers import (
     LoginSerializer,
     RegisterSerializer,
-    SignupOTPRequestSerializer,
     UserSerializer,
 )
-from .models import SignupOTP
 from .services.categories import seed_default_categories
-from .services.email_delivery import send_transactional_email
-from .throttles import AuthRateThrottle, OTPRateThrottle
+from .services.turnstile import (
+    TurnstileConfigurationError,
+    get_client_ip,
+    verify_turnstile_token,
+)
+from .throttles import AuthRateThrottle
 
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
-OTP_TTL_MINUTES = 10
-OTP_RESEND_COOLDOWN_SECONDS = 60
-OTP_MAX_ATTEMPTS = 5
 
 
 def _auth_response(user):
@@ -36,102 +30,43 @@ def _auth_response(user):
     return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
-def _generate_otp():
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
-def _send_signup_otp_email(email, otp):
-    subject = "Your Sora Expense verification code"
-    text_body = (
-        f"Your Sora Expense verification code is {otp}. "
-        f"It expires in {OTP_TTL_MINUTES} minutes."
-    )
-    html_body = render_to_string(
-        "emails/signup_otp.html",
-        {"otp": otp, "ttl_minutes": OTP_TTL_MINUTES},
-    )
-    send_transactional_email(
-        subject=subject,
-        text_body=text_body,
-        html_body=html_body,
-        to=[email],
-    )
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@throttle_classes([OTPRateThrottle])
-def request_signup_otp(request):
-    serializer = SignupOTPRequestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    email = serializer.validated_data["email"]
-    now = timezone.now()
-    response_detail = "If this email can register, a verification code will be sent."
-
-    if (
-        User.objects.filter(email=email).exists()
-        or User.objects.filter(username=email).exists()
-    ):
-        return Response({"detail": response_detail})
-
-    latest = SignupOTP.objects.filter(email=email, consumed_at__isnull=True).first()
-    if latest and latest.created_at > now - timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS):
-        return Response(
-            {"detail": "Please wait before requesting another code."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
-        )
-
-    code = _generate_otp()
-    SignupOTP.objects.create(
-        email=email,
-        code_hash=make_password(code),
-        expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
-    )
-
+def _verify_turnstile(request):
+    token = request.data.get("turnstile_token") or request.data.get("cf-turnstile-response")
     try:
-        _send_signup_otp_email(email, code)
-    except Exception:
-        logger.exception("Signup OTP email failed for %s", email)
+        is_valid, error_codes = verify_turnstile_token(token, get_client_ip(request))
+    except TurnstileConfigurationError:
+        logger.exception("Turnstile is not configured.")
         return Response(
-            {"detail": "Could not process verification email right now."},
+            {"detail": "Human verification is not configured."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
-
-    return Response({"detail": response_detail})
+    except Exception:
+        logger.exception("Turnstile verification failed.")
+        return Response(
+            {"detail": "Human verification could not be checked."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if not is_valid:
+        logger.info("Turnstile rejected auth request: %s", error_codes)
+        return Response(
+            {"detail": "Human verification failed. Try again."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([AuthRateThrottle])
 def register(request):
+    turnstile_error = _verify_turnstile(request)
+    if turnstile_error:
+        return turnstile_error
+
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    email = serializer.validated_data["email"]
-    otp = serializer.validated_data["otp"]
-    now = timezone.now()
-
-    otp_record = SignupOTP.objects.filter(email=email, consumed_at__isnull=True).first()
-    if not otp_record:
-        return Response({"detail": "Request a verification code first."}, status=400)
-
-    if otp_record.expires_at < now:
-        return Response({"detail": "Verification code expired."}, status=400)
-
-    if otp_record.attempts >= OTP_MAX_ATTEMPTS:
-        return Response({"detail": "Too many invalid attempts. Request a new code."}, status=400)
-
-    if not check_password(otp, otp_record.code_hash):
-        otp_record.attempts += 1
-        otp_record.save(update_fields=["attempts"])
-        return Response({"detail": "Invalid verification code."}, status=400)
-
     user = serializer.save()
     seed_default_categories(user)
-    otp_record.consumed_at = now
-    otp_record.save(update_fields=["consumed_at"])
-    SignupOTP.objects.filter(email=email, consumed_at__isnull=True).exclude(
-        id=otp_record.id
-    ).update(consumed_at=now)
     return _auth_response(user)
 
 
@@ -139,6 +74,10 @@ def register(request):
 @permission_classes([AllowAny])
 @throttle_classes([AuthRateThrottle])
 def login(request):
+    turnstile_error = _verify_turnstile(request)
+    if turnstile_error:
+        return turnstile_error
+
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     return _auth_response(serializer.validated_data["user"])

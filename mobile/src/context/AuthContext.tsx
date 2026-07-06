@@ -6,7 +6,6 @@ import {
   loginWithEmail,
   logoutOnServer,
   registerWithEmail,
-  requestSignupOtp,
 } from "../services/authApi";
 import { setAuthToken } from "../services/apiClient";
 import { AppUser, AuthResponse } from "../types/auth";
@@ -17,9 +16,8 @@ type AuthContextValue = {
   user: AppUser | null;
   token: string | null;
   initializing: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  requestOtp: (email: string) => Promise<void>;
-  register: (name: string, email: string, password: string, otp: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken: string) => Promise<void>;
+  register: (name: string, email: string, password: string, turnstileToken: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -65,14 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       initializing,
-      login: async (email, password) => {
-        await applyAuth(await loginWithEmail(email, password));
+      login: async (email, password, turnstileToken) => {
+        await applyAuth(await loginWithEmail(email, password, turnstileToken));
       },
-      requestOtp: async (email) => {
-        await requestSignupOtp(email);
-      },
-      register: async (name, email, password, otp) => {
-        await applyAuth(await registerWithEmail(name, email, password, otp));
+      register: async (name, email, password, turnstileToken) => {
+        await applyAuth(await registerWithEmail(name, email, password, turnstileToken));
       },
       logout: async () => {
         try {

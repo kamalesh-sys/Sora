@@ -1,29 +1,26 @@
 import { AuthResponse, AppUser } from "../types/auth";
 import { client } from "./apiClient";
 
-export async function requestSignupOtp(email: string) {
-  await client.post("/auth/request-signup-otp/", { email });
-}
-
 export async function registerWithEmail(
   name: string,
   email: string,
   password: string,
-  otp: string
+  turnstileToken: string
 ) {
   const response = await client.post<AuthResponse>("/auth/register/", {
     name,
     email,
     password,
-    otp,
+    turnstile_token: turnstileToken,
   });
   return response.data;
 }
 
-export async function loginWithEmail(email: string, password: string) {
+export async function loginWithEmail(email: string, password: string, turnstileToken: string) {
   const response = await client.post<AuthResponse>("/auth/login/", {
     email,
     password,
+    turnstile_token: turnstileToken,
   });
   return response.data;
 }

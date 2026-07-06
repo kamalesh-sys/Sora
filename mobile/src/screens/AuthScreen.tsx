@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppButton } from "../components/AppLayout";
 import { SoraIllustration } from "../components/SoraIllustratedEmpty";
+import { TurnstileBox } from "../components/TurnstileBox";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import { useSoraResponsive } from "../theme/responsive";
@@ -18,14 +19,14 @@ export function AuthScreen() {
   const { colors } = useAppSettings();
   const responsive = useSoraResponsive();
   const inlineIllustrationSize = responsive.tiny ? 116 : responsive.compact ? 132 : 148;
-  const { login, register, requestOtp } = useAuth();
+  const { login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
-  const [otpSent, setOtpSent] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -35,8 +36,8 @@ export function AuthScreen() {
     if (!isSignup) {
       return "Welcome back";
     }
-    return otpSent ? "Verify your email" : "Create account";
-  }, [isSignup, otpSent]);
+    return "Create account";
+  }, [isSignup]);
 
   const resetStatus = () => {
     setMessage("");
@@ -50,31 +51,13 @@ export function AuthScreen() {
     if (!password.trim()) {
       return "Password is required.";
     }
-    if (isSignup && password.length < 8) {
-      return "Password must be at least 8 characters.";
+    if (isSignup && password.length < 12) {
+      return "Password must be at least 12 characters.";
+    }
+    if (!turnstileToken) {
+      return "Complete human verification.";
     }
     return "";
-  };
-
-  const sendOtp = async () => {
-    const validationError = validate();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setLoading(true);
-    resetStatus();
-    try {
-      await requestOtp(email.trim());
-      setOtpSent(true);
-      setOtp("");
-      setMessage("OTP sent to your email.");
-    } catch {
-      setError("Could not send OTP.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   const submit = async () => {
@@ -84,26 +67,18 @@ export function AuthScreen() {
       return;
     }
 
-    if (isSignup && !otpSent) {
-      await sendOtp();
-      return;
-    }
-
-    if (isSignup && !/^\d{6}$/.test(otp.trim())) {
-      setError("Enter the 6-digit OTP.");
-      return;
-    }
-
     setLoading(true);
     resetStatus();
     try {
       if (isSignup) {
-        await register(name.trim(), email.trim(), password, otp.trim());
+        await register(name.trim(), email.trim(), password, turnstileToken);
       } else {
-        await login(email.trim(), password);
+        await login(email.trim(), password, turnstileToken);
       }
     } catch {
       setError(isSignup ? "Could not create account." : "Invalid email or password.");
+      setTurnstileToken("");
+      setTurnstileResetKey((current) => current + 1);
     } finally {
       setLoading(false);
     }
@@ -111,8 +86,8 @@ export function AuthScreen() {
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
-    setOtpSent(false);
-    setOtp("");
+    setTurnstileToken("");
+    setTurnstileResetKey((current) => current + 1);
     resetStatus();
   };
 
@@ -162,13 +137,13 @@ export function AuthScreen() {
 
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Text style={[styles.subtitle, { color: colors.muted }]}>
-              {isSignup ? "Use email OTP to create your account." : "Login with your email and password."}
+              {isSignup ? "Create your account with email, password and human verification." : "Login with your email, password and human verification."}
             </Text>
 
             {isSignup ? (
               <TextInput
                 autoCapitalize="words"
-                disabled={otpSent || loading}
+                disabled={loading}
                 label="Name"
                 mode="outlined"
                 onChangeText={setName}
@@ -179,7 +154,7 @@ export function AuthScreen() {
 
             <TextInput
               autoCapitalize="none"
-              disabled={otpSent || loading}
+              disabled={loading}
               keyboardType="email-address"
               label="Email"
               mode="outlined"
@@ -188,7 +163,7 @@ export function AuthScreen() {
               value={email}
             />
             <TextInput
-              disabled={otpSent || loading}
+              disabled={loading}
               label="Password"
               mode="outlined"
               onChangeText={setPassword}
@@ -204,17 +179,12 @@ export function AuthScreen() {
               value={password}
             />
 
-            {isSignup && otpSent ? (
-              <TextInput
-                keyboardType="number-pad"
-                label="OTP"
-                maxLength={6}
-                mode="outlined"
-                onChangeText={setOtp}
-                style={styles.input}
-                value={otp}
-              />
-            ) : null}
+            <TurnstileBox
+              resetKey={turnstileResetKey}
+              token={turnstileToken}
+              onError={setError}
+              onToken={setTurnstileToken}
+            />
 
             {message ? <Text style={[styles.message, { color: colors.success }]}>{message}</Text> : null}
             {error ? <Text style={[styles.message, { color: colors.danger }]}>{error}</Text> : null}
@@ -227,14 +197,8 @@ export function AuthScreen() {
               onPress={submit}
               style={styles.primaryButton}
             >
-              {!isSignup ? "Login" : otpSent ? "Verify and create account" : "Send OTP"}
+              {!isSignup ? "Login" : "Create account"}
             </AppButton>
-
-            {isSignup && otpSent ? (
-              <AppButton disabled={loading} mode="text" onPress={sendOtp}>
-                Resend OTP
-              </AppButton>
-            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
