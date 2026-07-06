@@ -12,12 +12,13 @@ cd D:\HouseExpenseTracker\backend
 ```
 
 The migration `expenses.0007_enable_rls_on_supabase_public_tables` enables Row Level Security on Django tables in Supabase `public`.
+The migration `expenses.0008_add_deny_all_rls_policies` adds explicit deny-all policies for Supabase API roles.
 
 This is intentional:
 
 - Django talks directly to PostgreSQL with `DATABASE_URL`.
 - Supabase REST/Data API should not expose Django tables.
-- No RLS policies are created, so Supabase `anon` and `authenticated` API roles cannot read these tables.
+- Deny-all RLS policies are created, so Supabase `anon` and `authenticated` API roles cannot read or write these tables.
 - Do not enable `FORCE ROW LEVEL SECURITY`; Django still needs to operate as the database owner.
 
 In Supabase Dashboard:
