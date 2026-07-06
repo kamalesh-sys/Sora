@@ -1,8 +1,8 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 
+from expenses.services.email_delivery import validate_email_delivery_settings
 from expenses.services.email_reports import send_monthly_report_email
 from expenses.services.reports import parse_month_range
 
@@ -31,11 +31,7 @@ class Command(BaseCommand):
         except ValidationError:
             raise CommandError("Invalid recipient email address.")
 
-        if not settings.EMAIL_HOST:
-            raise CommandError("EMAIL_HOST is not configured.")
-
-        if not settings.DEFAULT_FROM_EMAIL:
-            raise CommandError("DEFAULT_FROM_EMAIL is not configured.")
+        validate_email_delivery_settings()
 
         try:
             start, end = parse_month_range(month)

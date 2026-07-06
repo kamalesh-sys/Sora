@@ -3,13 +3,13 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import serializers
 
 from expenses.models import PeopleInvitation, Person
+from expenses.services.email_delivery import send_transactional_email
 
 
 INVITE_TTL_DAYS = 7
@@ -73,9 +73,12 @@ def send_people_invitation_email(invitation, raw_token):
             "ttl_days": INVITE_TTL_DAYS,
         },
     )
-    message = EmailMultiAlternatives(subject=subject, body=text_body, to=[invitation.email])
-    message.attach_alternative(html_body, "text/html")
-    message.send(fail_silently=False)
+    send_transactional_email(
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        to=[invitation.email],
+    )
 
 
 @transaction.atomic

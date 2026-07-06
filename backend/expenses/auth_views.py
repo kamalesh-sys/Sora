@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import status
@@ -21,6 +20,7 @@ from .auth_serializers import (
 )
 from .models import SignupOTP
 from .services.categories import seed_default_categories
+from .services.email_delivery import send_transactional_email
 from .throttles import AuthRateThrottle, OTPRateThrottle
 
 
@@ -50,9 +50,12 @@ def _send_signup_otp_email(email, otp):
         "emails/signup_otp.html",
         {"otp": otp, "ttl_minutes": OTP_TTL_MINUTES},
     )
-    message = EmailMultiAlternatives(subject=subject, body=text_body, to=[email])
-    message.attach_alternative(html_body, "text/html")
-    message.send(fail_silently=False)
+    send_transactional_email(
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        to=[email],
+    )
 
 
 @api_view(["POST"])

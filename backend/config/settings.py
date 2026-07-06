@@ -182,6 +182,7 @@ REST_FRAMEWORK = {
 }
 
 # Email
+EMAIL_PROVIDER = config("EMAIL_PROVIDER", default="smtp")
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",
     default="django.core.mail.backends.smtp.EmailBackend",
@@ -198,6 +199,8 @@ DEFAULT_FROM_EMAIL = config(
 )
 
 FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="soraexpense://")
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default=DEFAULT_FROM_EMAIL)
 
 LOGGING = {
     "version": 1,

@@ -1,6 +1,4 @@
-from django.conf import settings
-from django.core.mail import EmailMessage
-
+from .email_delivery import send_transactional_email
 from .reports import build_monthly_report_pdf, get_monthly_expenses, get_monthly_report_data
 
 
@@ -11,23 +9,28 @@ def build_monthly_report_email(start, end, recipient_email):
     month_label = start.strftime("%Y-%m")
     filename = f"sora-expense-report-{month_label}.pdf"
 
-    email = EmailMessage(
-        subject=f"Sora Expense Report - {month_label}",
-        body=(
-            f"Attached is your house expense report for {month_label}.\n\n"
-            f"Total Expense: {report_data['total_expense']}\n"
-            f"Total Budget: {report_data['total_budget']}\n"
-            f"Balance: {report_data['balance']}\n"
-            f"Expense Count: {report_data['expense_count']}"
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[recipient_email],
+    subject = f"Sora Expense Report - {month_label}"
+    body = (
+        f"Attached is your house expense report for {month_label}.\n\n"
+        f"Total Expense: {report_data['total_expense']}\n"
+        f"Total Budget: {report_data['total_budget']}\n"
+        f"Balance: {report_data['balance']}\n"
+        f"Expense Count: {report_data['expense_count']}"
     )
-    email.attach(filename, pdf_content, "application/pdf")
-    return email, filename
+    attachments = [(filename, pdf_content, "application/pdf")]
+    return subject, body, recipient_email, attachments, filename
 
 
 def send_monthly_report_email(start, end, recipient_email):
-    email, filename = build_monthly_report_email(start, end, recipient_email)
-    sent_count = email.send(fail_silently=False)
+    subject, body, recipient, attachments, filename = build_monthly_report_email(
+        start,
+        end,
+        recipient_email,
+    )
+    sent_count = send_transactional_email(
+        subject=subject,
+        text_body=body,
+        to=[recipient],
+        attachments=attachments,
+    )
     return sent_count, filename
