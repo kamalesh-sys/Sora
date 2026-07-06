@@ -7,5 +7,9 @@ export const widgetTaskHandler: WidgetTaskHandler = async ({ renderWidget, widge
     return;
   }
 
-  renderWidget(await renderSoraExpenseWidget());
+  try {
+    renderWidget(await renderSoraExpenseWidget());
+  } catch {
+    // Widget rendering must never crash the main app process.
+  }
 };

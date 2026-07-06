@@ -32,19 +32,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function restoreSession() {
-      const savedToken = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (!savedToken) {
-        setInitializing(false);
-        return;
-      }
-
-      setAuthToken(savedToken);
       try {
+        const savedToken = await SecureStore.getItemAsync(TOKEN_KEY);
+        if (!savedToken) {
+          return;
+        }
+
+        setAuthToken(savedToken);
         const profile = await getMe();
         setToken(savedToken);
         setUser(profile);
       } catch {
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => undefined);
         setAuthToken(null);
       } finally {
         setInitializing(false);
@@ -81,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // Local logout should still succeed if the server is unreachable.
         }
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => undefined);
         setAuthToken(null);
         setToken(null);
         setUser(null);

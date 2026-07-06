@@ -70,6 +70,21 @@ cd D:\HouseExpenseTracker\mobile
 npm run typecheck
 ```
 
+Check Expo native dependency compatibility:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npx expo install --check
+npx expo-doctor
+```
+
+Run the app with production/minified JavaScript:
+
+```powershell
+cd D:\HouseExpenseTracker\mobile
+npx expo start --no-dev --minify
+```
+
 Start Expo:
 
 ```powershell
@@ -169,6 +184,12 @@ Release APK output:
 
 ```text
 D:\HouseExpenseTracker\mobile\android\app\build\outputs\apk\release\app-release.apk
+```
+
+The release APK is configured as a universal APK for phones and emulators:
+
+```text
+armeabi-v7a, arm64-v8a, x86, x86_64
 ```
 
 Install release APK on connected phone:

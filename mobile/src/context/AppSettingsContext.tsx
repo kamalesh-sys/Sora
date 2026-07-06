@@ -95,7 +95,7 @@ function isThemeMode(value: string | null): value is ThemeMode {
 }
 
 function isAccentName(value: string | null): value is AccentName {
-  return accentOptions.some((item) => item.name === value);
+  return value === "custom" || accentOptions.some((item) => item.name === value);
 }
 
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
@@ -105,20 +105,24 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function restoreSettings() {
-      const [savedThemeMode, savedAccent, savedCustomAccent] = await Promise.all([
-        SecureStore.getItemAsync(THEME_MODE_KEY),
-        SecureStore.getItemAsync(ACCENT_KEY),
-        SecureStore.getItemAsync(CUSTOM_ACCENT_KEY),
-      ]);
+      try {
+        const [savedThemeMode, savedAccent, savedCustomAccent] = await Promise.all([
+          SecureStore.getItemAsync(THEME_MODE_KEY),
+          SecureStore.getItemAsync(ACCENT_KEY),
+          SecureStore.getItemAsync(CUSTOM_ACCENT_KEY),
+        ]);
 
-      if (isThemeMode(savedThemeMode)) {
-        setThemeModeState(savedThemeMode);
-      }
-      if (isAccentName(savedAccent)) {
-        setAccentNameState(savedAccent);
-      }
-      if (savedCustomAccent && /^#[0-9a-fA-F]{6}$/.test(savedCustomAccent)) {
-        setCustomAccentColorState(savedCustomAccent);
+        if (isThemeMode(savedThemeMode)) {
+          setThemeModeState(savedThemeMode);
+        }
+        if (isAccentName(savedAccent)) {
+          setAccentNameState(savedAccent);
+        }
+        if (savedCustomAccent && /^#[0-9a-fA-F]{6}$/.test(savedCustomAccent)) {
+          setCustomAccentColorState(savedCustomAccent);
+        }
+      } catch {
+        // Theme preferences are non-critical. Keep defaults if secure storage is unavailable.
       }
     }
 
@@ -156,17 +160,17 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       paperTheme,
       setAccentName: (nextAccent) => {
         setAccentNameState(nextAccent);
-        SecureStore.setItemAsync(ACCENT_KEY, nextAccent);
+        SecureStore.setItemAsync(ACCENT_KEY, nextAccent).catch(() => undefined);
       },
       setCustomAccentColor: (nextColor) => {
         setCustomAccentColorState(nextColor);
         setAccentNameState("custom");
-        SecureStore.setItemAsync(CUSTOM_ACCENT_KEY, nextColor);
-        SecureStore.setItemAsync(ACCENT_KEY, "custom");
+        SecureStore.setItemAsync(CUSTOM_ACCENT_KEY, nextColor).catch(() => undefined);
+        SecureStore.setItemAsync(ACCENT_KEY, "custom").catch(() => undefined);
       },
       setThemeMode: (nextMode) => {
         setThemeModeState(nextMode);
-        SecureStore.setItemAsync(THEME_MODE_KEY, nextMode);
+        SecureStore.setItemAsync(THEME_MODE_KEY, nextMode).catch(() => undefined);
       },
       themeMode,
     }),

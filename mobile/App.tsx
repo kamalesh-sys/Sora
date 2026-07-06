@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppSettingsProvider, useAppSettings } from "./src/context/AppSettingsContext";
 import { AuthProvider } from "./src/context/AuthContext";
 import { FeedbackProvider } from "./src/context/FeedbackContext";
+import { AppErrorBoundary } from "./src/components/AppErrorBoundary";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/RootNavigator";
 
@@ -31,11 +32,13 @@ const linking: LinkingOptions<RootStackParamList> = {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppSettingsProvider>
-        <AppShell />
-      </AppSettingsProvider>
-    </SafeAreaProvider>
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <AppSettingsProvider>
+          <AppShell />
+        </AppSettingsProvider>
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }
 

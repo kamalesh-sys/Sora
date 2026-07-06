@@ -17,8 +17,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.soraexpense.app",
-      "usesCleartextTraffic": true
+      "package": "com.soraexpense.app"
     },
     "plugins": [
       "expo-secure-store",

@@ -37,12 +37,11 @@ function toWidgetData(expense?: Expense | null): SoraExpenseWidgetData {
 }
 
 export async function getStoredWidgetData() {
-  const raw = await AsyncStorage.getItem(WIDGET_STORAGE_KEY);
-  if (!raw) {
-    return emptyWidgetData;
-  }
-
   try {
+    const raw = await AsyncStorage.getItem(WIDGET_STORAGE_KEY);
+    if (!raw) {
+      return emptyWidgetData;
+    }
     return { ...emptyWidgetData, ...JSON.parse(raw) } as SoraExpenseWidgetData;
   } catch {
     return emptyWidgetData;
@@ -51,7 +50,7 @@ export async function getStoredWidgetData() {
 
 export async function saveLatestExpenseForWidget(expense?: Expense | null) {
   const data = toWidgetData(expense);
-  await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data));
+  await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data)).catch(() => undefined);
   return data;
 }
 
@@ -62,7 +61,7 @@ export async function renderSoraExpenseWidget(): Promise<WidgetRepresentation> {
 }
 
 export async function updateSoraExpenseWidget(expense?: Expense | null) {
-  await saveLatestExpenseForWidget(expense);
+  await saveLatestExpenseForWidget(expense).catch(() => undefined);
 
   if (Platform.OS !== "android") {
     return;
