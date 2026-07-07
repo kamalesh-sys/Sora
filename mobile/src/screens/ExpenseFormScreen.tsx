@@ -1,13 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform, ScrollView, StyleSheet, TextInput as NativeTextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Text, TextInput } from "react-native-paper";
 
-import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraCardSkeleton, SoraChip, SoraError, SoraHeader, SoraScreen } from "../components/SoraUI";
-import { useAppSettings } from "../context/AppSettingsContext";
+import {
+  AmountInput,
+  AppButton,
+  AppCard,
+  AppScreen,
+  AppSegmentedControl,
+  AppText,
+  BottomActionBar,
+  CategoryChip,
+  ErrorState,
+  FormField,
+  IconButton,
+  SectionHeader,
+  SkeletonBlock,
+  dsSpace,
+  useDs,
+} from "../design-system";
 import { useFeedback } from "../context/FeedbackContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
@@ -16,37 +30,24 @@ import {
   getCategories,
   getExpense,
   getExpenses,
-  getHouseholds,
-  getPeople,
   seedDefaultCategories,
   updateExpense,
 } from "../services/expenseApi";
-import { getCategoryVisual, soraPalette } from "../theme/soraTheme";
-import type {
-  CreateExpensePayload,
-  ExpenseCategory,
-  ExpenseType,
-  ExpenseVisibility,
-  Household,
-  PaymentMethod,
-  Person,
-  SplitType,
-} from "../types/api";
+import { getCategoryVisual } from "../theme/soraTheme";
+import type { CreateExpensePayload, ExpenseCategory, ExpenseVisibility, PaymentMethod } from "../types/api";
 import { getTodayDate, isValidDate } from "../utils/date";
-import { formatPaymentMethod } from "../utils/format";
+import { formatDateLabel } from "../utils/format";
 import { updateSoraExpenseWidget } from "../widgets/widgetStorage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ExpenseForm">;
 
-const paymentMethods: PaymentMethod[] = ["upi", "cash"];
-const expenseTypes: Array<{ label: string; value: ExpenseType }> = [
-  { label: "Personal", value: "personal" },
-  { label: "Shared", value: "shared" },
-  { label: "Household", value: "household" },
-];
-const splitTypes: Array<{ label: string; value: SplitType }> = [
-  { label: "Equal", value: "equal" },
-  { label: "Custom", value: "custom_amount" },
+const CATEGORY_ORDER_KEY = "sora_expense_add_expense_category_order";
+const RECENT_PAYMENT_KEY = "sora_expense_recent_payment_mode";
+const RECENT_CATEGORY_KEY = "sora_expense_recent_category_id";
+
+const paymentModes: Array<{ label: string; value: PaymentMethod }> = [
+  { label: "UPI", value: "upi" },
+  { label: "Cash", value: "cash" },
 ];
 
 function toDateInputValue(date: Date) {
@@ -63,58 +64,106 @@ function fromDateInputValue(value: string) {
   return new Date(`${value}T00:00:00`);
 }
 
+async function applySavedCategoryOrder(rows: ExpenseCategory[]) {
+  try {
+    const rawOrder = await AsyncStorage.getItem(CATEGORY_ORDER_KEY);
+    const savedIds = rawOrder ? (JSON.parse(rawOrder) as number[]) : [];
+    if (!Array.isArray(savedIds) || !savedIds.length) {
+      return rows;
+    }
+
+    const byId = new Map(rows.map((item) => [item.id, item]));
+    const ordered = savedIds.map((id) => byId.get(id)).filter((item): item is ExpenseCategory => Boolean(item));
+    const missing = rows.filter((item) => !savedIds.includes(item.id));
+    return [...ordered, ...missing];
+  } catch {
+    return rows;
+  }
+}
+
+function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod) {
+  if (category?.name) {
+    return category.name;
+  }
+  return paymentMethod === "upi" ? "UPI expense" : "Expense";
+}
+
+function sanitizeAmount(value: string) {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...rest] = cleaned.split(".");
+  const decimal = rest.join("").slice(0, 2);
+  return rest.length ? `${whole}.${decimal}` : whole;
+}
+
+function normalizePaymentMethod(value?: string | null): PaymentMethod {
+  return value === "cash" ? "cash" : "upi";
+}
+
 export function ExpenseFormScreen({ navigation, route }: Props) {
-  const { colors } = useAppSettings();
+  const { colors } = useDs();
   const { success } = useFeedback();
+  const amountRef = useRef<TextInput>(null);
   const expenseId = route.params?.expenseId;
   const isEditing = Boolean(expenseId);
+
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [households, setHouseholds] = useState<Household[]>([]);
-  const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
   const [expenseDate, setExpenseDate] = useState(getTodayDate());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
-  const [expenseType, setExpenseType] = useState<ExpenseType>("personal");
-  const [householdId, setHouseholdId] = useState<number | null>(null);
-  const [splitType, setSplitType] = useState<SplitType>("equal");
-  const [selectedPeople, setSelectedPeople] = useState<number[]>([]);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [amountTouched, setAmountTouched] = useState(false);
+
+  const selectedCategory = useMemo(
+    () => categories.find((item) => item.id === category) ?? null,
+    [categories, category]
+  );
+  const cleanAmount = Number(amount);
+  const amountError = amountTouched && (!Number.isFinite(cleanAmount) || cleanAmount <= 0) ? "Enter an amount greater than 0." : "";
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const [peopleRows, householdRows] = await Promise.all([getPeople(), getHouseholds()]);
+      const [recentPayment, recentCategory] = await Promise.all([
+        AsyncStorage.getItem(RECENT_PAYMENT_KEY),
+        AsyncStorage.getItem(RECENT_CATEGORY_KEY),
+      ]);
       let categoryRows = await getCategories();
       if (!categoryRows.length) {
         categoryRows = await seedDefaultCategories();
       }
-
+      categoryRows = await applySavedCategoryOrder(categoryRows);
       setCategories(categoryRows);
-      setPeople(peopleRows);
-      setHouseholds(householdRows);
+
+      const recentCategoryId = recentCategory ? Number(recentCategory) : NaN;
+      if (Number.isFinite(recentCategoryId) && categoryRows.some((item) => item.id === recentCategoryId)) {
+        setCategory(recentCategoryId);
+      } else {
+        setCategory(categoryRows[0]?.id ?? null);
+      }
+      setPaymentMethod(normalizePaymentMethod(recentPayment));
 
       if (expenseId) {
         const expense = await getExpense(expenseId);
-        setTitle(expense.title);
         setAmount(expense.amount);
         setCategory(expense.category);
-        setPaymentMethod(expense.payment_method === "cash" ? "cash" : "upi");
+        setPaymentMethod(normalizePaymentMethod(expense.payment_method));
         setExpenseDate(expense.expense_date);
+        setTitle(expense.title);
         setNote(expense.note ?? "");
-        setExpenseType(expense.expense_type ?? "personal");
-        setHouseholdId(expense.household);
-        setSelectedPeople((expense.shares ?? []).map((share) => share.person).filter((id): id is number => Boolean(id)));
+        setDetailsOpen(Boolean(expense.title || expense.note));
       }
     } catch {
       setError("Could not load expense form.");
     } finally {
       setLoading(false);
+      setTimeout(() => amountRef.current?.focus(), 120);
     }
   }, [expenseId]);
 
@@ -122,68 +171,31 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     load();
   }, [load]);
 
-  const selectedCategory = useMemo(
-    () => categories.find((item) => item.id === category) ?? null,
-    [categories, category]
-  );
-  const selectedHousehold = useMemo(
-    () => households.find((item) => item.id === householdId) ?? null,
-    [households, householdId]
-  );
-
-  const togglePerson = (personId: number) => {
-    setSelectedPeople((current) =>
-      current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId]
-    );
-  };
-
   const save = async () => {
-    const cleanTitle = title.trim();
-    const cleanAmount = Number(amount);
-
-    if (!cleanTitle) {
-      setError("Title is required.");
-      return;
-    }
+    setAmountTouched(true);
     if (!Number.isFinite(cleanAmount) || cleanAmount <= 0) {
-      setError("Amount must be greater than 0.");
       return;
     }
     if (!isValidDate(expenseDate)) {
       setError("Choose a valid date.");
       return;
     }
-    if (expenseType === "household" && !householdId) {
-      setError("Choose a household for household expenses.");
-      return;
-    }
-    if (expenseType !== "personal" && selectedPeople.length === 0) {
-      setError("Choose at least one person for a shared split.");
-      return;
-    }
 
     setSaving(true);
     setError("");
     try {
-      const visibility: ExpenseVisibility =
-        expenseType === "personal" ? "private" : expenseType === "household" ? "household" : "shared";
+      const visibility: ExpenseVisibility = "private";
       const payload: CreateExpensePayload = {
         amount: cleanAmount.toFixed(2),
         category,
         expense_date: expenseDate,
-        expense_type: expenseType,
-        household: expenseType === "household" ? householdId : null,
+        expense_type: "personal",
+        household: null,
         note: note.trim(),
-        paid_by_user: "me" as const,
+        paid_by_user: "me",
         payment_method: paymentMethod,
-        title: cleanTitle,
+        title: title.trim() || getSmartTitle(selectedCategory, paymentMethod),
         visibility,
-        ...(expenseType !== "personal"
-          ? {
-              participants: selectedPeople.map((person) => ({ person })),
-              split_type: splitType,
-            }
-          : {}),
       };
 
       if (expenseId) {
@@ -191,11 +203,16 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       } else {
         await createExpense(payload);
       }
+
+      await Promise.all([
+        AsyncStorage.setItem(RECENT_PAYMENT_KEY, paymentMethod),
+        category ? AsyncStorage.setItem(RECENT_CATEGORY_KEY, String(category)) : AsyncStorage.removeItem(RECENT_CATEGORY_KEY),
+      ]);
       success();
       void refreshWidgetFromLatestExpense();
       navigation.navigate("Expenses");
     } catch {
-      setError("Could not save expense. Check split/category access.");
+      setError("Could not save expense. Check connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -205,7 +222,6 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     if (!expenseId) {
       return;
     }
-
     Alert.alert("Delete expense", "This expense will be removed.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -220,6 +236,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             navigation.navigate("Expenses");
           } catch {
             setError("Could not delete expense.");
+          } finally {
             setSaving(false);
           }
         },
@@ -247,224 +264,182 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SoraScreen>
-      <SoraHeader
-        backIcon="close"
-        onBack={() => navigation.goBack()}
-        title={isEditing ? "Edit Expense" : "Add Expense"}
-        subtitle={selectedCategory ? selectedCategory.name : "Track quickly, split when needed"}
-      />
-      <SoraError text={error} />
+    <AppScreen contentStyle={styles.screenContent}>
+      <View style={styles.header}>
+        <IconButton accessibilityLabel="Close add expense" icon="close" onPress={() => navigation.goBack()} />
+        <View style={styles.headerText}>
+          <AppText variant="headline">{isEditing ? "Edit expense" : "Add expense"}</AppText>
+        </View>
+        {isEditing ? <IconButton accessibilityLabel="Delete expense" icon="trash-can-outline" onPress={confirmDelete} tone="danger" /> : <View style={styles.headerSpacer} />}
+      </View>
+
+      <ErrorState text={error} />
 
       {loading ? (
-        <>
-          <SoraCardSkeleton rows={3} />
-          <SoraCardSkeleton rows={5} />
-        </>
+        <ExpenseFormSkeleton />
       ) : (
         <>
-
-      <SoraCard>
-        <Text style={[styles.amountLabel, { color: colors.text }]}>Amount</Text>
-        <View style={[styles.amountBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <Text style={[styles.currencySymbol, { color: colors.text }]}>₹</Text>
-          <NativeTextInput
+          <AmountInput
+            autoFocus
+            error={amountError}
+            onChangeText={(value) => {
+              setAmount(sanitizeAmount(value));
+              if (error) setError("");
+            }}
+            ref={amountRef}
+            returnKeyType="done"
             value={amount}
-            onChangeText={setAmount}
-            keyboardType="decimal-pad"
-            editable={!saving}
-            placeholder="0"
-            placeholderTextColor={colors.muted}
-            selectionColor={colors.accent}
-            style={[styles.amountInput, { color: colors.text }]}
           />
-        </View>
 
-        <TextInput label="Title" mode="outlined" value={title} onChangeText={setTitle} disabled={saving} style={styles.input} />
+          <SectionHeader action="Manage" onAction={() => navigation.navigate("Categories")} title="Category" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+            {categories.map((item) => {
+              const visual = getCategoryVisual(item.name, item.icon, item.color);
+              return (
+                <CategoryChip
+                  active={category === item.id}
+                  icon={visual.icon}
+                  key={item.id}
+                  label={item.name}
+                  onPress={() => setCategory(item.id)}
+                />
+              );
+            })}
+            <CategoryChip icon="plus" label="New" onPress={() => navigation.navigate("Categories")} />
+          </ScrollView>
 
-        <Text style={[styles.fieldLabel, { color: colors.text }]}>Payment Mode</Text>
-        <View style={[styles.segment, { backgroundColor: colors.background }]}>
-          {paymentMethods.map((method) => (
-            <AppButton
-              key={method}
-              mode={paymentMethod === method ? "contained" : "text"}
-              onPress={() => setPaymentMethod(method)}
-              style={styles.segmentButton}
-            >
-              {formatPaymentMethod(method)}
-            </AppButton>
-          ))}
-        </View>
+          <SectionHeader title="Payment" />
+          <AppSegmentedControl accessibilityLabel="Payment method" items={paymentModes} onChange={setPaymentMethod} style={styles.paymentSwitch} value={paymentMethod} />
 
-        <Text style={[styles.fieldLabel, { color: colors.text }]}>Date</Text>
-        <AppButton icon="calendar-month-outline" mode="outlined" onPress={() => setShowDatePicker(true)} style={styles.input}>
-          {expenseDate}
-        </AppButton>
-        {showDatePicker ? (
-          <View style={styles.datePickerWrap}>
-            <DateTimePicker
-              value={fromDateInputValue(expenseDate)}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={handleDateChange}
-            />
-            {Platform.OS === "ios" ? (
-              <AppButton compact mode="text" onPress={() => setShowDatePicker(false)}>
-                Done
-              </AppButton>
+          <AppCard style={styles.quickDetailsCard}>
+            <View style={styles.quickDetailsTop}>
+              <View>
+                <AppText color="textMuted" variant="caption">Date</AppText>
+                <AppText variant="bodyStrong">{formatDateLabel(expenseDate)}</AppText>
+              </View>
+              <View style={styles.quickActions}>
+                <IconButton accessibilityLabel="Pick date" icon="calendar-month-outline" onPress={() => setShowDatePicker(true)} tone="primary" />
+              </View>
+            </View>
+            {showDatePicker ? (
+              <DateTimePicker
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                mode="date"
+                onChange={handleDateChange}
+                value={fromDateInputValue(expenseDate)}
+              />
             ) : null}
-          </View>
-        ) : null}
-      </SoraCard>
+          </AppCard>
 
-      <SoraCard>
-        <Text style={[styles.fieldLabel, { color: colors.text }]}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          <SoraChip active={category === null} onPress={() => setCategory(null)}>
-            None
-          </SoraChip>
-          {categories.map((item) => {
-            const visual = getCategoryVisual(item.name, item.icon, item.color);
-            return (
-              <SoraChip active={category === item.id} key={item.id} onPress={() => setCategory(item.id)}>
-                <MaterialCommunityIcons name={visual.icon} size={15} color={category === item.id ? "#FFFFFF" : visual.color} /> {item.name}
-              </SoraChip>
-            );
-          })}
-          <SoraChip onPress={() => navigation.navigate("Categories")}>+ Category</SoraChip>
-        </ScrollView>
+          <Pressable android_ripple={{ color: colors.press }} onPress={() => setDetailsOpen((current) => !current)} style={styles.detailsToggle}>
+            <AppText color="textMuted" variant="label">{detailsOpen ? "Hide details" : "Add label or note"}</AppText>
+            <MaterialCommunityIcons name={detailsOpen ? "chevron-up" : "chevron-down"} size={22} color={colors.textMuted} />
+          </Pressable>
 
-        <Text style={[styles.fieldLabel, { color: colors.text }]}>Expense Type</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {expenseTypes.map((item) => (
-            <SoraChip active={expenseType === item.value} key={item.value} onPress={() => setExpenseType(item.value)}>
-              {item.label}
-            </SoraChip>
-          ))}
-        </ScrollView>
-
-        {expenseType === "household" ? (
-          <>
-            <Text style={[styles.fieldLabel, { color: colors.text }]}>Household</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {households.map((item) => (
-                <SoraChip active={householdId === item.id} key={item.id} onPress={() => setHouseholdId(item.id)}>
-                  {item.name}
-                </SoraChip>
-              ))}
-              <SoraChip onPress={() => navigation.navigate("Households")}>+ Home</SoraChip>
-            </ScrollView>
-          </>
-        ) : null}
-
-        {expenseType !== "personal" ? (
-          <>
-            <Text style={[styles.fieldLabel, { color: colors.text }]}>Split</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {splitTypes.map((item) => (
-                <SoraChip active={splitType === item.value} key={item.value} onPress={() => setSplitType(item.value)}>
-                  {item.label}
-                </SoraChip>
-              ))}
-            </ScrollView>
-            <Text style={[styles.fieldLabel, { color: colors.text }]}>People</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {people.map((person) => (
-                <SoraChip active={selectedPeople.includes(person.id)} key={person.id} onPress={() => togglePerson(person.id)}>
-                  {person.name}
-                </SoraChip>
-              ))}
-              <SoraChip onPress={() => navigation.navigate("People")}>+ Person</SoraChip>
-            </ScrollView>
-          </>
-        ) : null}
-
-        <TextInput
-          label="Note"
-          mode="outlined"
-          value={note}
-          onChangeText={setNote}
-          multiline
-          numberOfLines={3}
-          disabled={saving}
-          style={styles.input}
-        />
-      </SoraCard>
-
-      <AppButton mode="contained" onPress={save} loading={saving} disabled={saving || loading} contentStyle={styles.primaryContent}>
-        {isEditing ? "Save Changes" : "Save Expense"}
-      </AppButton>
-
-      {isEditing ? (
-        <AppButton mode="outlined" textColor={colors.danger} onPress={confirmDelete} disabled={saving} style={styles.deleteButton}>
-          Delete Expense
-        </AppButton>
-      ) : null}
+          {detailsOpen ? (
+            <AppCard>
+              <FormField label="Label" onChangeText={setTitle} placeholder={getSmartTitle(selectedCategory, paymentMethod)} value={title} />
+              <View style={{ height: dsSpace[1.5] }} />
+              <FormField
+                label="Note"
+                inputStyle={styles.noteField}
+                multiline
+                numberOfLines={3}
+                onChangeText={setNote}
+                placeholder="Optional"
+                value={note}
+              />
+            </AppCard>
+          ) : null}
         </>
       )}
-    </SoraScreen>
+
+      <BottomActionBar>
+        <AppButton block disabled={saving || loading} loading={saving} onPress={save}>
+          {isEditing ? "Save changes" : "Save expense"}
+        </AppButton>
+      </BottomActionBar>
+    </AppScreen>
+  );
+}
+
+function ExpenseFormSkeleton() {
+  return (
+    <View>
+      <SkeletonBlock height={116} />
+      <SkeletonBlock height={20} style={styles.skeletonTitle} width="32%" />
+      <View style={styles.skeletonChipRow}>
+        <SkeletonBlock height={44} radius={22} width={112} />
+        <SkeletonBlock height={44} radius={22} width={92} />
+        <SkeletonBlock height={44} radius={22} width={104} />
+      </View>
+      <SkeletonBlock height={20} style={styles.skeletonTitle} width="28%" />
+      <SkeletonBlock height={44} radius={22} />
+      <SkeletonBlock height={78} style={styles.skeletonTitle} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  amountLabel: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  amountBox: {
+  detailsToggle: {
     alignItems: "center",
-    borderRadius: 18,
-    borderWidth: 1,
     flexDirection: "row",
-    marginBottom: 18,
-    minHeight: 118,
-    paddingHorizontal: 22,
+    gap: dsSpace[0.5],
+    justifyContent: "center",
+    marginBottom: dsSpace[2],
+    minHeight: 48,
   },
-  amountInput: {
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  headerSpacer: {
+    width: 48,
+  },
+  headerText: {
     flex: 1,
-    fontSize: 48,
-    fontWeight: "800",
     minWidth: 0,
-    textAlign: "center",
   },
-  currencySymbol: {
-    fontSize: 48,
-    fontWeight: "900",
-    width: 56,
+  noteField: {
+    minHeight: 104,
+    textAlignVertical: "top",
   },
-  input: {
-    marginBottom: 14,
+  paymentSwitch: {
+    marginBottom: dsSpace[2],
   },
-  fieldLabel: {
-    fontSize: 17,
-    fontWeight: "900",
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  segment: {
-    borderRadius: 16,
+  quickActions: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: 6,
-    marginBottom: 16,
-    padding: 5,
+    flexWrap: "wrap",
+    gap: dsSpace[1],
+    justifyContent: "flex-end",
   },
-  segmentButton: {
-    flex: 1,
+  quickDetailsCard: {
+    marginTop: dsSpace[1],
   },
-  chipRow: {
-    gap: 8,
-    paddingBottom: 16,
-    paddingRight: 18,
+  quickDetailsTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1],
+    justifyContent: "space-between",
   },
-  datePickerWrap: {
-    marginBottom: 12,
+  rail: {
+    gap: dsSpace[1],
+    paddingBottom: dsSpace[1],
+    paddingRight: dsSpace[3],
   },
-  primaryContent: {
-    height: 52,
+  screenContent: {
+    paddingBottom: 112,
   },
-  deleteButton: {
-    marginTop: 10,
+  skeletonChipRow: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  skeletonTitle: {
+    marginTop: dsSpace[2],
+    marginBottom: dsSpace[1],
   },
 });

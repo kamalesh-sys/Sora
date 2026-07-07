@@ -1,25 +1,26 @@
-import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, LayoutAnimation, Modal, Platform, Pressable, StyleSheet, TextInput, UIManager, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-import { AppButton } from "../components/AppLayout";
-import { SoraIllustration } from "../components/SoraIllustratedEmpty";
+import { AppButton, AppCard, AppScreen, AppSegmentedControl, AppText, ErrorState, FormField, useDs } from "../design-system";
+import { dsRadius, dsSpace, dsTouch } from "../design-system/tokens";
 import { TurnstileBox } from "../components/TurnstileBox";
-import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
-import { useSoraResponsive } from "../theme/responsive";
-import { soraShadow } from "../theme/soraTheme";
-import AuthIllustration from "../../illustrations/character-running-with-kite.svg";
-import SoraLogo from "../assets/sora-logo.svg";
 
 type AuthMode = "login" | "signup";
 
+const authModes: Array<{ label: string; value: AuthMode }> = [
+  { label: "Log in", value: "login" },
+  { label: "Sign up", value: "signup" },
+];
+
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
+
 export function AuthScreen() {
-  const { colors } = useAppSettings();
-  const responsive = useSoraResponsive();
-  const inlineIllustrationSize = responsive.tiny ? 116 : responsive.compact ? 132 : 148;
   const { login, register } = useAuth();
+  const stretch = useRef(new Animated.Value(1)).current;
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -28,35 +29,47 @@ export function AuthScreen() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const isSignup = mode === "signup";
-  const title = useMemo(() => {
-    if (!isSignup) {
-      return "Welcome back";
-    }
-    return "Create account";
-  }, [isSignup]);
+  const title = isSignup ? "Create account" : "Log in";
+  const actionLabel = isSignup ? "Create account" : "Log in";
+  const loadingLabel = isSignup ? "Creating account" : "Logging in";
 
-  const resetStatus = () => {
-    setMessage("");
+  const passwordPlaceholder = useMemo(() => (isSignup ? "Minimum 12 characters" : "Password"), [isSignup]);
+  const stretchStyle = {
+    transform: [{ scaleY: stretch }],
+  };
+
+  const switchMode = (nextMode: AuthMode) => {
+    if (nextMode === mode) return;
+    stretch.stopAnimation();
+    stretch.setValue(0.985);
+    LayoutAnimation.configureNext({
+      create: { duration: 220, property: LayoutAnimation.Properties.opacity, type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { duration: 160, property: LayoutAnimation.Properties.opacity, type: LayoutAnimation.Types.easeInEaseOut },
+      duration: 260,
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+    });
+    setMode(nextMode);
     setError("");
+    setTurnstileToken("");
+    setTurnstileResetKey((current) => current + 1);
+    Animated.spring(stretch, {
+      friction: 7,
+      tension: 140,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
   };
 
   const validate = () => {
-    if (!email.trim()) {
-      return "Email is required.";
-    }
-    if (!password.trim()) {
-      return "Password is required.";
-    }
-    if (isSignup && password.length < 12) {
-      return "Password must be at least 12 characters.";
-    }
-    if (!turnstileToken) {
-      return "Complete human verification.";
-    }
+    const cleanEmail = email.trim();
+    if (!cleanEmail) return "Email is required.";
+    if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) return "Enter a valid email address.";
+    if (!password) return "Password is required.";
+    if (isSignup && password.length < 12) return "Password must be at least 12 characters.";
+    if (!turnstileToken) return "Complete human verification.";
     return "";
   };
 
@@ -68,7 +81,7 @@ export function AuthScreen() {
     }
 
     setLoading(true);
-    resetStatus();
+    setError("");
     try {
       if (isSignup) {
         await register(name.trim(), email.trim(), password, turnstileToken);
@@ -84,217 +97,282 @@ export function AuthScreen() {
     }
   };
 
-  const switchMode = (nextMode: AuthMode) => {
-    setMode(nextMode);
-    setTurnstileToken("");
-    setTurnstileResetKey((current) => current + 1);
-    resetStatus();
-  };
-
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
-        style={styles.keyboard}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            {
-              maxWidth: responsive.maxContentWidth,
-              paddingHorizontal: responsive.dashboard.contentPaddingX,
-            },
-          ]}
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={[styles.hero, soraShadow.purple, { backgroundColor: colors.accent }]}>
-            <View style={styles.heroTop}>
-              <View style={styles.heroTextBlock}>
-                <View style={styles.logoCircle}>
-                  <SoraLogo height={56} width={56} />
-                </View>
-                <Text style={styles.heroTitle}>Sora Expense</Text>
-                <Text style={styles.heroText}>Track house spending, bills, people and reports without the clutter.</Text>
-              </View>
-              <View style={styles.heroIllustration}>
-                <SoraIllustration color="#FFFFFF" source={AuthIllustration} size={inlineIllustrationSize} />
-              </View>
-            </View>
-          </View>
+    <AppScreen contentStyle={styles.content}>
+      <Animated.View style={[styles.brandWrap, stretchStyle]}>
+        <AppText style={styles.brandTitle} variant="title">Sora Expense</AppText>
+      </Animated.View>
 
-          <View style={[styles.panel, soraShadow.soft, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.modeRow, { backgroundColor: colors.background }]}>
-              <AppButton mode={mode === "login" ? "contained" : "text"} onPress={() => switchMode("login")} style={styles.modeButton}>
-                Login
-              </AppButton>
-              <AppButton mode={mode === "signup" ? "contained" : "text"} onPress={() => switchMode("signup")} style={styles.modeButton}>
-                Sign up
-              </AppButton>
-            </View>
+      <Animated.View style={stretchStyle}>
+        <AppCard elevated style={styles.panel}>
+          <AppSegmentedControl accessibilityLabel="Authentication mode" items={authModes} onChange={switchMode} style={styles.modeSwitch} value={mode} />
 
-            <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-            <Text style={[styles.subtitle, { color: colors.muted }]}>
-              {isSignup ? "Create your account with email, password and human verification." : "Login with your email, password and human verification."}
-            </Text>
+          <AppText style={styles.title} variant="title">{title}</AppText>
 
-            {isSignup ? (
-              <TextInput
-                autoCapitalize="words"
-                disabled={loading}
-                label="Name"
-                mode="outlined"
-                onChangeText={setName}
-                style={styles.input}
-                value={name}
-              />
-            ) : null}
+          <ErrorState text={error} />
 
-            <TextInput
-              autoCapitalize="none"
-              disabled={loading}
-              keyboardType="email-address"
-              label="Email"
-              mode="outlined"
-              onChangeText={setEmail}
-              style={styles.input}
-              value={email}
+          {isSignup ? (
+            <FormField
+              autoCapitalize="words"
+              editable={!loading}
+              label="Name"
+              onChangeText={setName}
+              placeholder="Your name"
+              returnKeyType="next"
+              style={styles.field}
+              value={name}
             />
-            <TextInput
-              disabled={loading}
-              label="Password"
-              mode="outlined"
-              onChangeText={setPassword}
-              right={
-                <TextInput.Icon
-                  forceTextInputFocus={false}
-                  icon={showPassword ? "eye-off-outline" : "eye-outline"}
-                  onPress={() => setShowPassword((current) => !current)}
-                />
-              }
-              secureTextEntry={!showPassword}
-              style={styles.input}
-              value={password}
-            />
+          ) : null}
 
+          <FormField
+            autoCapitalize="none"
+            editable={!loading}
+            keyboardType="email-address"
+            label="Email"
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            returnKeyType="next"
+            style={styles.field}
+            textContentType="emailAddress"
+            value={email}
+          />
+
+          <PasswordField
+            disabled={loading}
+            onChangeText={setPassword}
+            onToggle={() => setShowPassword((current) => !current)}
+            placeholder={passwordPlaceholder}
+            secure={!showPassword}
+            value={password}
+          />
+
+          <View style={styles.turnstile}>
             <TurnstileBox
               resetKey={turnstileResetKey}
               token={turnstileToken}
               onError={setError}
               onToken={setTurnstileToken}
             />
-
-            {message ? <Text style={[styles.message, { color: colors.success }]}>{message}</Text> : null}
-            {error ? <Text style={[styles.message, { color: colors.danger }]}>{error}</Text> : null}
-
-            <AppButton
-              contentStyle={styles.primaryContent}
-              disabled={loading}
-              loading={loading}
-              mode="contained"
-              onPress={submit}
-              style={styles.primaryButton}
-            >
-              {!isSignup ? "Login" : "Create account"}
-            </AppButton>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          <AppButton block disabled={loading} loading={loading} onPress={submit} style={styles.submit}>
+            {actionLabel}
+          </AppButton>
+        </AppCard>
+      </Animated.View>
+
+      <AuthLoadingOverlay label={loadingLabel} visible={loading} />
+    </AppScreen>
+  );
+}
+
+function PasswordField({
+  disabled,
+  onChangeText,
+  onToggle,
+  placeholder,
+  secure,
+  value,
+}: {
+  disabled: boolean;
+  onChangeText: (value: string) => void;
+  onToggle: () => void;
+  placeholder: string;
+  secure: boolean;
+  value: string;
+}) {
+  const { colors } = useDs();
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={styles.field}>
+      <AppText color="textMuted" style={styles.label} variant="label">
+        Password
+      </AppText>
+      <View
+        style={[
+          styles.passwordBox,
+          {
+            backgroundColor: colors.surface,
+            borderColor: focused ? colors.accent : colors.border,
+            borderWidth: focused ? 2 : 1,
+          },
+        ]}
+      >
+        <TextInput
+          editable={!disabled}
+          onBlur={() => setFocused(false)}
+          onChangeText={onChangeText}
+          onFocus={() => setFocused(true)}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSubtle}
+          secureTextEntry={secure}
+          selectionColor={colors.accent}
+          style={[styles.passwordInput, { color: colors.text }]}
+          textContentType="password"
+          value={value}
+        />
+        <Pressable
+          accessibilityLabel={secure ? "Show password" : "Hide password"}
+          accessibilityRole="button"
+          android_ripple={{ color: colors.press, borderless: true }}
+          hitSlop={8}
+          onPress={onToggle}
+          style={styles.eyeButton}
+        >
+          <MaterialCommunityIcons name={secure ? "eye-outline" : "eye-off-outline"} size={22} color={colors.textMuted} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function AuthLoadingOverlay({ label, visible }: { label: string; visible: boolean }) {
+  const { colors } = useDs();
+  const spin = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    spin.setValue(0);
+    pulse.setValue(0);
+    const spinAnimation = Animated.loop(
+      Animated.timing(spin, {
+        duration: 900,
+        easing: Easing.linear,
+        toValue: 1,
+        useNativeDriver: true,
+      })
+    );
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          duration: 650,
+          easing: Easing.out(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          duration: 650,
+          easing: Easing.in(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    spinAnimation.start();
+    pulseAnimation.start();
+    return () => {
+      spinAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [pulse, spin, visible]);
+
+  const rotate = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.92, 1.04],
+  });
+
+  return (
+    <Modal animationType="fade" transparent visible={visible}>
+      <View style={styles.loadingOverlay}>
+        <View style={[styles.loadingPanel, { backgroundColor: colors.surface }]}>
+          <Animated.View
+            style={[
+              styles.loadingRing,
+              {
+                borderColor: colors.border,
+                borderTopColor: colors.accent,
+                transform: [{ rotate }, { scale }],
+              },
+            ]}
+          />
+          <AppText style={styles.loadingText} variant="headline">{label}</AppText>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
+  brandTitle: {
+    textAlign: "center",
   },
-  keyboard: {
-    flex: 1,
+  brandWrap: {
+    alignItems: "center",
+    marginBottom: dsSpace[3],
   },
   content: {
-    alignSelf: "center",
-    flexGrow: 1,
-    justifyContent: "flex-start",
-    paddingBottom: 44,
-    paddingTop: 18,
-    width: "100%",
-  },
-  hero: {
-    borderRadius: 26,
-    marginBottom: 18,
-    padding: 18,
-  },
-  heroIllustration: {
-    alignItems: "center",
     justifyContent: "center",
-    marginLeft: 10,
+    paddingBottom: dsSpace[5],
+    paddingTop: dsSpace[3],
   },
-  heroTextBlock: {
+  eyeButton: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: dsTouch.comfortable,
+    justifyContent: "center",
+    width: dsTouch.comfortable,
+  },
+  field: {
+    marginBottom: dsSpace[1.5],
+  },
+  label: {
+    marginBottom: dsSpace[0.5],
+  },
+  loadingOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(10,11,13,0.42)",
     flex: 1,
-    minWidth: 0,
-  },
-  heroTop: {
-    alignItems: "center",
-    flexDirection: "row",
-  },
-  logoCircle: {
-    alignItems: "center",
-    borderRadius: 28,
-    height: 56,
     justifyContent: "center",
-    marginBottom: 18,
+    padding: dsSpace[2],
+  },
+  loadingPanel: {
+    alignItems: "center",
+    borderRadius: dsRadius.lg,
+    minWidth: 188,
+    padding: dsSpace[3],
+  },
+  loadingRing: {
+    borderRadius: 28,
+    borderWidth: 3,
+    height: 56,
     width: 56,
   },
-  heroTitle: {
-    color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "900",
+  loadingText: {
+    marginTop: dsSpace[2],
   },
-  heroText: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: 6,
+  modeSwitch: {
+    marginBottom: dsSpace[3],
   },
   panel: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 16,
+    padding: dsSpace[2],
   },
-  modeRow: {
-    borderRadius: 18,
+  passwordBox: {
+    alignItems: "center",
+    borderRadius: dsRadius.sm,
     flexDirection: "row",
-    gap: 6,
-    marginBottom: 18,
-    padding: 5,
+    minHeight: dsTouch.large,
+    paddingLeft: dsSpace[1.5],
+    paddingRight: dsSpace[0.5],
   },
-  modeButton: {
+  passwordInput: {
     flex: 1,
+    fontFamily: "Inter_500Medium",
+    fontSize: 16,
+    minWidth: 0,
+    paddingVertical: 0,
+  },
+  submit: {
+    marginTop: dsSpace[0.5],
   },
   title: {
-    fontSize: 26,
-    fontWeight: "900",
+    marginBottom: dsSpace[2],
   },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 14,
-    marginTop: 4,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  message: {
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  primaryButton: {
-    borderRadius: 12,
-    marginTop: 2,
-  },
-  primaryContent: {
-    height: 50,
+  turnstile: {
+    marginBottom: dsSpace[1],
   },
 });

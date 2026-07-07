@@ -99,7 +99,7 @@ export function SoraDonutChart({
                   {row.label}
                 </Text>
                 <Text style={[styles.legendMeta, { color: colors.muted }]}>
-                  {formatCurrencyCompact(value)} - {percent}%{row.count ? ` - ${row.count} rows` : ""}
+                  {formatCurrencyCompact(value)} - {percent}%{row.count ? ` - ${row.count} expenses` : ""}
                 </Text>
               </View>
             </View>

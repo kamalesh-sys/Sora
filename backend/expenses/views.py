@@ -16,17 +16,14 @@ from .models import (
     ExpenseShare,
     HouseholdMember,
     MonthlyBudget,
-    PeopleInvitation,
     Person,
     RecurringBill,
     Settlement,
 )
 from .serializers import (
-    AcceptPeopleInvitationSerializer,
     AddHouseholdMemberSerializer,
     BillOccurrenceSerializer,
     CategoryBudgetSerializer,
-    CreatePeopleInvitationSerializer,
     ExpenseCategorySerializer,
     ExpenseSerializer,
     ExpenseShareSerializer,
@@ -34,7 +31,6 @@ from .serializers import (
     HouseholdMemberSerializer,
     HouseholdSerializer,
     MonthlyBudgetSerializer,
-    PeopleInvitationSerializer,
     PersonSerializer,
     RecurringBillSerializer,
     SettlementSerializer,
@@ -47,14 +43,6 @@ from .services.household_reports import (
     get_household_monthly_report,
 )
 from .services.households import get_user_households, remove_member, update_member
-from .services.people import (
-    accept_invitation,
-    accept_invitation_record,
-    cancel_invitation,
-    decline_invitation,
-    normalize_email,
-    send_people_invitation_email,
-)
 from .services.privacy import (
     can_create_household_expense,
     can_edit_expense,
@@ -148,46 +136,9 @@ class PersonViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Person.objects.filter(owner=self.request.user).order_by("name", "id")
 
-    @action(detail=False, methods=["post"], url_path="invite")
-    def invite(self, request):
-        serializer = CreatePeopleInvitationSerializer(
-            data=request.data,
-            context={"request": request, "send_email": False},
-        )
-        serializer.is_valid(raise_exception=True)
-        invitation = serializer.save()
-        try:
-            send_people_invitation_email(invitation, invitation.raw_token)
-        except Exception:
-            invitation.status = PeopleInvitation.Status.CANCELLED
-            invitation.save(update_fields=["status", "updated_at"])
-            return Response(
-                {"detail": "Could not send invitation email. Check email settings."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        return Response(
-            PeopleInvitationSerializer(invitation, context={"request": request}).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-    @action(detail=False, methods=["get"], url_path="invitations")
-    def invitations(self, request):
-        user_email = normalize_email(request.user.email)
-        invitations = PeopleInvitation.objects.filter(
-            Q(invited_by=request.user) | Q(email=user_email)
-        ).select_related("invited_by", "person").distinct().order_by("-created_at")
-        return Response(PeopleInvitationSerializer(invitations, many=True, context={"request": request}).data)
-
     @action(detail=False, methods=["get"], url_path="overview")
     def overview(self, request):
         people = list(self.get_queryset())
-        user_email = normalize_email(request.user.email)
-        invitations = (
-            PeopleInvitation.objects.filter(Q(invited_by=request.user) | Q(email=user_email))
-            .select_related("invited_by", "person")
-            .distinct()
-            .order_by("-created_at")
-        )
         ledgers = {}
         for person in people:
             ledger = get_person_ledger(request.user, person)
@@ -200,51 +151,10 @@ class PersonViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "people": PersonSerializer(people, many=True, context={"request": request}).data,
-                "invitations": PeopleInvitationSerializer(
-                    invitations,
-                    many=True,
-                    context={"request": request},
-                ).data,
+                "invitations": [],
                 "ledgers": ledgers,
             }
         )
-
-    @action(detail=False, methods=["post"], url_path=r"invitations/(?P<invitation_id>[^/.]+)/cancel")
-    def cancel_invitation(self, request, invitation_id=None):
-        invitation = PeopleInvitation.objects.filter(id=invitation_id, invited_by=request.user).first()
-        if not invitation:
-            raise ValidationError("You do not have access to this invitation.")
-        invitation = cancel_invitation(invitation, request.user)
-        return Response(PeopleInvitationSerializer(invitation, context={"request": request}).data)
-
-    @action(detail=False, methods=["post"], url_path="invitations/accept")
-    def accept_invitation(self, request):
-        serializer = AcceptPeopleInvitationSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        invitation = accept_invitation(serializer.validated_data["token"], request.user)
-        return Response(PeopleInvitationSerializer(invitation, context={"request": request}).data)
-
-    @action(detail=False, methods=["post"], url_path=r"invitations/(?P<invitation_id>[^/.]+)/accept")
-    def accept_invitation_by_id(self, request, invitation_id=None):
-        invitation = PeopleInvitation.objects.filter(
-            id=invitation_id,
-            email=normalize_email(request.user.email),
-        ).first()
-        if not invitation:
-            raise ValidationError("You do not have access to this invitation.")
-        invitation = accept_invitation_record(invitation, request.user)
-        return Response(PeopleInvitationSerializer(invitation, context={"request": request}).data)
-
-    @action(detail=False, methods=["post"], url_path=r"invitations/(?P<invitation_id>[^/.]+)/decline")
-    def decline_invitation_by_id(self, request, invitation_id=None):
-        invitation = PeopleInvitation.objects.filter(
-            id=invitation_id,
-            email=normalize_email(request.user.email),
-        ).first()
-        if not invitation:
-            raise ValidationError("You do not have access to this invitation.")
-        invitation = decline_invitation(invitation, request.user)
-        return Response(PeopleInvitationSerializer(invitation, context={"request": request}).data)
 
     @action(detail=True, methods=["get"], url_path="ledger")
     def ledger(self, request, pk=None):
@@ -263,6 +173,17 @@ class PersonViewSet(viewsets.ModelViewSet):
     def share_summary(self, request, pk=None):
         person = self.get_object()
         return Response({"text": build_person_share_summary(request.user, person, request.query_params.get("month"))})
+
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        person = self.get_object()
+        expenses = (
+            visible_expenses_for_user(request.user)
+            .filter(Q(paid_by_person=person) | Q(shares__person=person))
+            .distinct()
+            .order_by("-expense_date", "-created_at")
+        )
+        return Response(ExpenseSerializer(expenses, many=True, context={"request": request}).data)
 
 
 class HouseholdViewSet(viewsets.ModelViewSet):

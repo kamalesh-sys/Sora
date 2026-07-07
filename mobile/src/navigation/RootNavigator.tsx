@@ -9,12 +9,9 @@ import { CategoriesScreen } from "../screens/CategoriesScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { ExpenseFormScreen } from "../screens/ExpenseFormScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
-import { HouseholdDetailScreen } from "../screens/HouseholdDetailScreen";
-import { HouseholdsScreen } from "../screens/HouseholdsScreen";
 import { PeopleScreen } from "../screens/PeopleScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReportsScreen } from "../screens/ReportsScreen";
-import { SettlementsScreen } from "../screens/SettlementsScreen";
 
 export type RootStackParamList = {
   Bills: undefined;
@@ -22,13 +19,10 @@ export type RootStackParamList = {
   ExpenseForm: { expenseId?: number } | undefined;
   Expenses: undefined;
   Home: undefined;
-  HouseholdDetail: { householdId: number };
-  Households: undefined;
   People: undefined;
   Profile: undefined;
   Reports: undefined;
   Settings: undefined;
-  Settlements: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -65,12 +59,9 @@ export function RootNavigator() {
       <Stack.Screen name="Categories" component={CategoriesScreen} />
       <Stack.Screen name="Bills" component={BillsScreen} />
       <Stack.Screen name="People" component={PeopleScreen} />
-      <Stack.Screen name="Households" component={HouseholdsScreen} />
-      <Stack.Screen name="HouseholdDetail" component={HouseholdDetailScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
       <Stack.Screen name="Settings" component={ProfileScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="Settlements" component={SettlementsScreen} />
     </Stack.Navigator>
   );
 }

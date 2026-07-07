@@ -34,6 +34,8 @@ android/app/build/
 
 # Local machine files
 .vscode/
+.reference/
 local.properties
 .DS_Store
 Thumbs.db
+AGENTS.md

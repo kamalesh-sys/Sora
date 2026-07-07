@@ -1,27 +1,28 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Text, TextInput } from "react-native-paper";
+import ColorPicker from "react-native-wheel-color-picker";
 
-import { AppButton } from "../components/AppLayout";
-import { SoraIllustration } from "../components/SoraIllustratedEmpty";
-import { SoraCard, SoraHeader, SoraIconRow, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
-import { API_BASE_URL } from "../config/api";
 import {
-  AccentName,
-  ThemeMode,
-  accentOptions,
-  useAppSettings,
-} from "../context/AppSettingsContext";
+  AppButton,
+  AppCard,
+  AppScreen,
+  AppText,
+  IconButton,
+  ListRow,
+  SectionHeader,
+  dsRadius,
+  dsSpace,
+  useDs,
+} from "../design-system";
+import { AccentName, ThemeMode, accentOptions, useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import { useSoraResponsive } from "../theme/responsive";
-import { soraPalette } from "../theme/soraTheme";
-import ProfileIllustration from "../../illustrations/confident-person-walking.svg";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Profile" | "Settings">;
 
+const appVersion = "1.0.0";
 const moneyNotes = [
   {
     title: "Use one spending account",
@@ -29,162 +30,144 @@ const moneyNotes = [
   },
   {
     title: "Review every Sunday",
-    text: "A 10-minute weekly check catches grocery, delivery, transport, and impulse spending before month-end.",
-  },
-  {
-    title: "Set category limits",
-    text: "Give groceries, utilities, transport, and food their own limits instead of relying only on one total budget.",
+    text: "A 10-minute weekly check catches grocery, delivery, transport and food delivery before month-end.",
   },
   {
     title: "Keep fixed bills recurring",
-    text: "Add rent, internet, subscriptions, school fees, and EMIs as bills so upcoming cash needs are clear.",
-  },
-  {
-    title: "Separate savings first",
-    text: "Move savings right after income arrives. Track spending against the money left, not the full salary.",
+    text: "Add rent, internet, subscriptions, school fees and EMIs as bills so upcoming cash needs are clear.",
   },
 ];
 
 export function ProfileScreen({ navigation }: Props) {
+  const { colors } = useDs();
   const {
     accentColor,
     accentName,
-    colors,
     customAccentColor,
     setAccentName,
     setCustomAccentColor,
     setThemeMode,
     themeMode,
   } = useAppSettings();
-  const responsive = useSoraResponsive();
   const { logout, user } = useAuth();
-  const inlineIllustrationSize = responsive.tiny ? 116 : responsive.compact ? 132 : 148;
-  const [customColorInput, setCustomColorInput] = useState(customAccentColor);
-  const customColor = customColorInput.trim();
-  const customColorIsValid = /^#[0-9a-fA-F]{6}$/.test(customColor);
+  const [customPickerOpen, setCustomPickerOpen] = useState(accentName === "custom");
+  const [draftCustomColor, setDraftCustomColor] = useState(customAccentColor);
 
-  const applyCustomColor = () => {
-    if (customColorIsValid) {
-      setCustomAccentColor(customColor);
+  const applyPickerColor = (nextColor: string) => {
+    if (/^#[0-9a-fA-F]{6}$/.test(nextColor)) {
+      setDraftCustomColor(nextColor);
+      setCustomAccentColor(nextColor);
     }
   };
 
+  const confirmLogout = () => {
+    Alert.alert("Logout", "You will need to sign in again.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", style: "destructive", onPress: logout },
+    ]);
+  };
+
   return (
-    <SoraScreen>
-      <SoraHeader
-        title="Settings"
-        subtitle="Account, app theme and money notes"
-        onBack={() => navigation.goBack()}
-      />
-
-      <SoraCard tone="purple" style={styles.accountCard}>
-        <View style={styles.accountContent}>
-          <View style={styles.accountText}>
-            <Text style={styles.accountName}>{user?.first_name || "Sora user"}</Text>
-            <Text style={styles.accountEmail}>{user?.email || "No email"}</Text>
-            <Text style={styles.apiText} numberOfLines={1}>API: {API_BASE_URL}</Text>
-          </View>
-          <SoraIllustration color="#FFFFFF" source={ProfileIllustration} size={inlineIllustrationSize} />
+    <AppScreen>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <AppText variant="title">Settings</AppText>
+          <AppText color="textSubtle" variant="caption">Account, theme and app preferences</AppText>
         </View>
-      </SoraCard>
+        <IconButton accessibilityLabel="Close settings" icon="close" onPress={() => navigation.goBack()} />
+      </View>
 
-      <SoraCard>
-        <Text style={[styles.blockTitle, { color: colors.text }]}>Appearance</Text>
+      <AppCard>
+        <View style={styles.accountRow}>
+          <View style={[styles.avatar, { backgroundColor: accentColor }]}>
+            <AppText style={styles.avatarText} variant="headline">{(user?.first_name || user?.email || "S").slice(0, 1).toUpperCase()}</AppText>
+          </View>
+          <View style={styles.accountText}>
+            <AppText numberOfLines={1} variant="headline">{user?.first_name || "Sora user"}</AppText>
+            <AppText color="textSubtle" numberOfLines={1} variant="caption">{user?.email || "No email"}</AppText>
+          </View>
+        </View>
+      </AppCard>
+
+      <SectionHeader title="Appearance" />
+      <AppCard>
+        <AppText color="textMuted" style={styles.label} variant="label">Theme</AppText>
         <View style={styles.modeRow}>
           {(["light", "dark"] as ThemeMode[]).map((mode) => (
-            <AppButton
-              key={mode}
-              mode={themeMode === mode ? "contained" : "outlined"}
-              onPress={() => setThemeMode(mode)}
-              style={styles.modeButton}
-            >
+            <AppButton key={mode} onPress={() => setThemeMode(mode)} style={styles.modeButton} variant={themeMode === mode ? "primary" : "secondary"}>
               {mode === "light" ? "Light" : "Dark"}
             </AppButton>
           ))}
         </View>
 
-        <Text style={[styles.label, { color: colors.muted }]}>Accent color</Text>
+        <AppText color="textMuted" style={styles.label} variant="label">Accent</AppText>
         <View style={styles.colorGrid}>
           {accentOptions.map((option) => (
             <ColorDot
               active={accentName === option.name}
               color={option.color}
               key={option.name}
-              onPress={() => setAccentName(option.name as AccentName)}
+              onPress={() => {
+                setAccentName(option.name as AccentName);
+                setCustomPickerOpen(false);
+              }}
             />
           ))}
           <ColorDot
             active={accentName === "custom"}
-            color={customColorIsValid ? customColor : accentColor}
-            icon={accentName === "custom" ? "check" : "plus"}
-            onPress={applyCustomColor}
+            color={accentName === "custom" ? accentColor : draftCustomColor}
+            icon="pencil-outline"
+            onPress={() => {
+              setCustomPickerOpen((current) => !current);
+              setCustomAccentColor(draftCustomColor);
+            }}
+            showIcon
           />
         </View>
 
-        <View style={styles.customColorRow}>
-          <TextInput
-            autoCapitalize="none"
-            label="Custom hex"
-            mode="outlined"
-            onChangeText={setCustomColorInput}
-            placeholder="#2563eb"
-            style={styles.customColorInput}
-            value={customColorInput}
-          />
-          <AppButton mode="contained" disabled={!customColorIsValid} onPress={applyCustomColor}>
-            Apply
-          </AppButton>
-        </View>
-      </SoraCard>
+        {customPickerOpen ? (
+          <View style={[styles.colorPickerPanel, { borderColor: colors.border }]}>
+            <View style={styles.colorPickerHeader}>
+              <AppText variant="bodyStrong">Custom color</AppText>
+              <View style={[styles.colorPreview, { backgroundColor: draftCustomColor }]} />
+            </View>
+            <ColorPicker
+              color={draftCustomColor}
+              gapSize={12}
+              onColorChange={setDraftCustomColor}
+              onColorChangeComplete={applyPickerColor}
+              palette={accentOptions.map((option) => option.color)}
+              sliderSize={22}
+              swatches
+              swatchesLast
+              thumbSize={28}
+            />
+          </View>
+        ) : null}
+      </AppCard>
 
-      <SoraSectionHeader title="Manage" />
-      <SoraCard style={styles.linkCard}>
-        <SoraIconRow
-          icon="shape-outline"
-          iconBackground={soraPalette.purpleSoft}
-          iconColor={accentColor}
-          meta="Create, edit and seed defaults"
-          onPress={() => navigation.navigate("Categories")}
-          title="Categories"
-        />
-        <SoraIconRow
-          icon="account-group-outline"
-          iconBackground={soraPalette.greenSurface}
-          iconColor={soraPalette.green}
-          meta="People, email invites and ledgers"
-          onPress={() => navigation.navigate("People")}
-          title="People"
-        />
-        <SoraIconRow
-          icon="home-group"
-          iconBackground={soraPalette.redSurface}
-          iconColor={soraPalette.red}
-          meta="Shared homes, members and reports"
-          onPress={() => navigation.navigate("Households")}
-          title="Households"
-        />
-        <SoraIconRow
-          icon="cash-check"
-          iconBackground={soraPalette.purpleSoft}
-          iconColor={accentColor}
-          meta="Settlement history and cancellations"
-          onPress={() => navigation.navigate("Settlements")}
-          title="Settlements"
-        />
-      </SoraCard>
+      <SectionHeader title="Manage" />
+      <AppCard>
+        <ListRow description="Create, edit and seed defaults" icon="tag-multiple-outline" onPress={() => navigation.navigate("Categories")} title="Categories" />
+        <ListRow description="People, balances and history" icon="account-multiple-outline" onPress={() => navigation.navigate("People")} title="People" />
+        <ListRow description="CSV and PDF are available from Reports" icon="file-export-outline" onPress={() => navigation.navigate("Reports")} title="Export data" />
+      </AppCard>
 
-      <SoraSectionHeader title="Money Notes" />
+      <SectionHeader title="Money notes" />
       {moneyNotes.map((note) => (
-        <SoraCard key={note.title} style={styles.noteCard}>
-          <Text style={[styles.noteTitle, { color: colors.text }]}>{note.title}</Text>
-          <Text style={[styles.noteText, { color: colors.muted }]}>{note.text}</Text>
-        </SoraCard>
+        <AppCard key={note.title}>
+          <AppText variant="bodyStrong">{note.title}</AppText>
+          <AppText color="textMuted" style={styles.noteText} variant="body">{note.text}</AppText>
+        </AppCard>
       ))}
 
-      <AppButton mode="outlined" textColor={colors.danger} onPress={logout} style={styles.logoutButton}>
-        Logout
-      </AppButton>
-    </SoraScreen>
+      <SectionHeader title="About" />
+      <AppCard>
+        <ListRow description={`Version ${appVersion}`} icon="information-outline" title="Sora Expense" />
+      </AppCard>
+
+      <AppButton onPress={confirmLogout} variant="danger">Logout</AppButton>
+    </AppScreen>
   );
 }
 
@@ -193,11 +176,13 @@ function ColorDot({
   color,
   icon = "check",
   onPress,
+  showIcon = false,
 }: {
   active: boolean;
   color: string;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   onPress: () => void;
+  showIcon?: boolean;
 }) {
   return (
     <Pressable
@@ -206,66 +191,34 @@ function ColorDot({
       onPress={onPress}
       style={[styles.colorDot, { backgroundColor: color }, active && styles.colorDotActive]}
     >
-      {active ? <MaterialCommunityIcons name={icon} size={20} color="#FFFFFF" /> : null}
+      {active || showIcon ? <MaterialCommunityIcons name={icon} size={20} color="#FFFFFF" /> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  accountCard: {
-    paddingVertical: 22,
-  },
-  accountContent: {
+  accountRow: {
     alignItems: "center",
     flexDirection: "row",
+    gap: dsSpace[1.5],
   },
   accountText: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 12,
   },
-  accountName: {
+  avatar: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 56,
+    justifyContent: "center",
+    width: 56,
+  },
+  avatarText: {
     color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  accountEmail: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 15,
-    marginTop: 4,
-  },
-  apiText: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 12,
-    marginTop: 14,
-  },
-  blockTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    marginBottom: 12,
-  },
-  modeRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
-  },
-  modeButton: {
-    flex: 1,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 14,
   },
   colorDot: {
     alignItems: "center",
-    borderRadius: 22,
+    borderRadius: dsRadius.pill,
     height: 44,
     justifyContent: "center",
     width: 44,
@@ -275,31 +228,53 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     elevation: 3,
   },
-  customColorRow: {
+  colorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
+  },
+  colorPickerHeader: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1.5],
   },
-  customColorInput: {
+  colorPickerPanel: {
+    borderRadius: dsRadius.lg,
+    borderWidth: 1,
+    height: 330,
+    padding: dsSpace[2],
+  },
+  colorPreview: {
+    borderColor: "rgba(255,255,255,0.75)",
+    borderRadius: dsRadius.pill,
+    borderWidth: 2,
+    height: 32,
+    width: 32,
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  label: {
+    marginBottom: dsSpace[1],
+  },
+  modeButton: {
     flex: 1,
   },
-  linkCard: {
-    gap: 4,
-  },
-  noteCard: {
-    marginBottom: 10,
-  },
-  noteTitle: {
-    fontSize: 17,
-    fontWeight: "900",
+  modeRow: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
   },
   noteText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  logoutButton: {
-    marginBottom: 18,
-    marginTop: 4,
+    marginTop: dsSpace[0.5],
   },
 });

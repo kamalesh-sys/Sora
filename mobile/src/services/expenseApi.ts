@@ -7,21 +7,16 @@ import {
   DashboardSummary,
   Expense,
   ExpenseCategory,
-  Household,
-  HouseholdBalance,
-  HouseholdMember,
-  HouseholdMonthlyReport,
   MonthlyBudget,
   MonthlySummary,
   PaymentMethod,
-  PeopleInvitation,
   PeopleOverview,
   Person,
   PersonLedger,
   RecurringBill,
   SaveBudgetPayload,
-  Settlement,
   ShareSummary,
+  Settlement,
 } from "../types/api";
 import { cachedGet, client } from "./apiClient";
 
@@ -146,36 +141,6 @@ export async function deletePerson(id: number) {
   await client.delete(`/people/${id}/`);
 }
 
-export async function invitePerson(payload: { email: string; name?: string; relation_type?: Person["relation_type"]; person?: number }) {
-  const response = await client.post<PeopleInvitation>("/people/invite/", payload);
-  return response.data;
-}
-
-export async function getInvitations() {
-  const response = await cachedGet<PeopleInvitation[]>("/people/invitations/");
-  return response.data;
-}
-
-export async function cancelInvitation(id: number) {
-  const response = await client.post<PeopleInvitation>(`/people/invitations/${id}/cancel/`);
-  return response.data;
-}
-
-export async function acceptInvitation(token: string) {
-  const response = await client.post<PeopleInvitation>("/people/invitations/accept/", { token });
-  return response.data;
-}
-
-export async function acceptInvitationById(id: number) {
-  const response = await client.post<PeopleInvitation>(`/people/invitations/${id}/accept/`);
-  return response.data;
-}
-
-export async function declineInvitation(id: number) {
-  const response = await client.post<PeopleInvitation>(`/people/invitations/${id}/decline/`);
-  return response.data;
-}
-
 export async function getPersonLedger(id: number) {
   const response = await cachedGet<PersonLedger>(`/people/${id}/ledger/`);
   return response.data;
@@ -188,69 +153,24 @@ export async function getPersonShareSummary(id: number, month?: string) {
   return response.data;
 }
 
-export async function getHouseholds() {
-  const response = await cachedGet<Household[] | { results: Household[] }>("/households/");
-  return unpackList(response.data);
-}
-
-export async function getHousehold(id: number) {
-  const response = await cachedGet<Household>(`/households/${id}/`);
+export async function getPersonHistory(id: number) {
+  const response = await cachedGet<Expense[]>(`/people/${id}/history/`);
   return response.data;
 }
 
-export async function createHousehold(payload: Pick<Household, "name"> & Partial<Household>) {
-  const response = await client.post<Household>("/households/", payload);
-  return response.data;
-}
-
-export async function updateHousehold(id: number, payload: Partial<Household>) {
-  const response = await client.patch<Household>(`/households/${id}/`, payload);
-  return response.data;
-}
-
-export async function deleteHousehold(id: number) {
-  await client.delete(`/households/${id}/`);
-}
-
-export async function getHouseholdMembers(id: number) {
-  const response = await cachedGet<HouseholdMember[]>(`/households/${id}/members/`);
-  return response.data;
-}
-
-export async function addHouseholdMember(
-  householdId: number,
-  payload: { person?: number; user?: number; role?: string; visibility_level?: string }
-) {
-  const response = await client.post<HouseholdMember>(`/households/${householdId}/members/`, payload);
-  return response.data;
-}
-
-export async function updateHouseholdMember(householdId: number, memberId: number, payload: Partial<HouseholdMember>) {
-  const response = await client.patch<HouseholdMember>(`/households/${householdId}/members/${memberId}/`, payload);
-  return response.data;
-}
-
-export async function removeHouseholdMember(householdId: number, memberId: number) {
-  const response = await client.delete<HouseholdMember>(`/households/${householdId}/members/${memberId}/`);
-  return response.data;
-}
-
-export async function getHouseholdBalances(id: number) {
-  const response = await cachedGet<HouseholdBalance[]>(`/households/${id}/balances/`);
-  return response.data;
-}
-
-export async function getHouseholdReport(id: number, month: string) {
-  const response = await cachedGet<HouseholdMonthlyReport>(`/households/${id}/reports/monthly-summary/`, {
-    params: { month },
-  });
-  return response.data;
-}
-
-export async function getHouseholdShareSummary(id: number, month: string) {
-  const response = await cachedGet<ShareSummary>(`/households/${id}/share-summary/`, {
-    params: { month },
-  });
+export async function createSettlement(payload: {
+  amount: string;
+  expense?: number | null;
+  expense_share?: number | null;
+  from_person?: number | null;
+  from_user?: number | null;
+  method?: PaymentMethod;
+  note?: string;
+  status?: Settlement["status"];
+  to_person?: number | null;
+  to_user?: number | null;
+}) {
+  const response = await client.post<Settlement>("/settlements/", payload);
   return response.data;
 }
 
@@ -274,13 +194,6 @@ export async function saveCategoryBudget(payload: {
 
 export async function getCategoryBudgetUsage(month: string) {
   const response = await cachedGet<CategoryBudgetUsage>("/category-budgets/usage/", {
-    params: { month },
-  });
-  return response.data;
-}
-
-export async function getHouseholdCategoryBudgetUsage(householdId: number, month: string) {
-  const response = await cachedGet<CategoryBudgetUsage>(`/households/${householdId}/category-budgets/usage/`, {
     params: { month },
   });
   return response.data;
@@ -310,13 +223,7 @@ export async function getBillOccurrences() {
   return unpackList(response.data);
 }
 
-export async function getBillCalendar(month: string, householdId?: number) {
-  if (householdId) {
-    const response = await cachedGet<BillOccurrence[]>(`/households/${householdId}/bill-calendar/`, {
-      params: { month },
-    });
-    return response.data;
-  }
+export async function getBillCalendar(month: string) {
   const response = await cachedGet<BillOccurrence[]>("/bill-calendar/", { params: { month } });
   return response.data;
 }
@@ -332,27 +239,6 @@ export async function markBillPaid(
 
 export async function skipBillOccurrence(id: number) {
   const response = await client.post<BillOccurrence>(`/bill-occurrences/${id}/skip/`);
-  return response.data;
-}
-
-export async function getSettlements() {
-  const response = await cachedGet<Settlement[] | { results: Settlement[] }>("/settlements/");
-  return unpackList(response.data);
-}
-
-export async function createSettlement(payload: {
-  expense_share?: number;
-  amount: string;
-  method: PaymentMethod;
-  status?: Settlement["status"];
-  note?: string;
-}) {
-  const response = await client.post<Settlement>("/settlements/", payload);
-  return response.data;
-}
-
-export async function cancelSettlement(id: number) {
-  const response = await client.post<Settlement>(`/settlements/${id}/cancel/`);
   return response.data;
 }
 

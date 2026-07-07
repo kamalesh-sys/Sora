@@ -1,36 +1,55 @@
 import { useCallback, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Text, TextInput } from "react-native-paper";
 
-import { AppButton } from "../components/AppLayout";
 import { SoraDonutChart } from "../components/SoraDonutChart";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraHeader, SoraIconRow, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
-import { useAppSettings } from "../context/AppSettingsContext";
+import {
+  AppButton,
+  AppCard,
+  AppScreen,
+  AppText,
+  EmptyState,
+  ErrorState,
+  FormField,
+  IconButton,
+  ListRow,
+  SectionHeader,
+  SkeletonBlock,
+  SkeletonList,
+  dsRadius,
+  dsSpace,
+  useDs,
+} from "../design-system";
 import { useAuth } from "../context/AuthContext";
-import type { RootStackParamList } from "../navigation/RootNavigator";
-import { getHouseholdReport, getHouseholds, getMonthlySummary } from "../services/expenseApi";
+import { getMonthlySummary } from "../services/expenseApi";
 import { exportMonthlyReport } from "../services/reportExport";
-import { soraPalette } from "../theme/soraTheme";
-import type { Household, HouseholdMonthlyReport, MonthlySummary } from "../types/api";
+import type { MonthlySummary } from "../types/api";
 import { getCurrentMonth, isValidMonth } from "../utils/date";
-import { formatCurrencyCompact } from "../utils/format";
+import { formatCurrencyCompact, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Reports">;
-type Scope = "personal" | "household";
+function shiftMonth(value: string, offset: number) {
+  const [year, month] = value.split("-").map(Number);
+  const date = new Date(year, month - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
 
-export function ReportsScreen({ navigation }: Props) {
-  const { colors } = useAppSettings();
+function getComparison(current: MonthlySummary | null | undefined, previous: MonthlySummary | null | undefined, month: string) {
+  const currentTotal = parseAmount(current?.total_expense);
+  const previousTotal = parseAmount(previous?.total_expense);
+  if (!previousTotal) return `${formatMonthLabel(month)} spend: ${formatCurrencyCompact(currentTotal)}`;
+  const change = ((currentTotal - previousTotal) / previousTotal) * 100;
+  return `${change >= 0 ? "Up" : "Down"} ${Math.abs(change).toFixed(0)}% vs last month`;
+}
+
+export function ReportsScreen() {
+  const { colors } = useDs();
   const { token } = useAuth();
-  const [scope, setScope] = useState<Scope>("personal");
   const [month, setMonth] = useState(getCurrentMonth());
-  const [households, setHouseholds] = useState<Household[]>([]);
-  const [householdId, setHouseholdId] = useState<number | null>(null);
-  const [personal, setPersonal] = useState<MonthlySummary | null>(null);
-  const [householdReport, setHouseholdReport] = useState<HouseholdMonthlyReport | null>(null);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [previousSummary, setPreviousSummary] = useState<MonthlySummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,52 +59,34 @@ export function ReportsScreen({ navigation }: Props) {
       setLoading(false);
       return;
     }
+
     setError("");
     try {
-      const householdRows = await getHouseholds();
-      setHouseholds(householdRows);
-      const activeHousehold = householdId ?? householdRows[0]?.id ?? null;
-      if (!householdId && activeHousehold) {
-        setHouseholdId(activeHousehold);
-      }
-
-      if (scope === "household" && activeHousehold) {
-        setHouseholdReport(await getHouseholdReport(activeHousehold, month));
-      } else {
-        setPersonal(await getMonthlySummary(month));
-      }
+      const [current, previous] = await Promise.all([getMonthlySummary(month), getMonthlySummary(shiftMonth(month, -1))]);
+      setSummary(current);
+      setPreviousSummary(previous);
     } catch {
-      setError("Could not load report.");
+      setError("Could not load report. Pull to retry.");
     } finally {
       setLoading(false);
     }
-  }, [householdId, month, scope]);
+  }, [month]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(!personal && !householdReport);
+      setLoading(!summary);
       load();
-    }, [householdReport, load, personal])
+    }, [load, summary])
   );
 
-  const summary = useMemo(() => {
-    if (scope === "household") {
-      return {
-        balance: householdReport?.remaining ?? "0.00",
-        budget: householdReport?.household_budget ?? "0.00",
-        categories: householdReport?.category_breakdown ?? [],
-        count: householdReport?.expense_count ?? 0,
-        total: householdReport?.total_spent ?? "0.00",
-      };
-    }
-    return {
-      balance: personal?.balance ?? "0.00",
-      budget: personal?.total_budget ?? "0.00",
-      categories: personal?.category_breakdown ?? [],
-      count: personal?.expense_count ?? 0,
-      total: personal?.total_expense ?? "0.00",
-    };
-  }, [householdReport, personal, scope]);
+  const total = parseAmount(summary?.total_expense);
+  const budget = parseAmount(summary?.total_budget);
+  const balance = parseAmount(summary?.balance);
+  const budgetUsed = budget > 0 ? Math.min(100, Math.round((total / budget) * 100)) : 0;
+  const chartRows = useMemo(
+    () => (summary?.category_breakdown ?? []).map((row) => ({ count: row.count, label: row.category_name, value: row.total })),
+    [summary?.category_breakdown]
+  );
 
   const exportReport = async (type: "csv" | "pdf") => {
     if (!token) {
@@ -96,165 +97,231 @@ export function ReportsScreen({ navigation }: Props) {
       setError("Month must use YYYY-MM format.");
       return;
     }
-    setExporting(true);
+
+    setExporting(type);
     setError("");
     try {
-      await exportMonthlyReport({
-        householdId: scope === "household" && householdId ? householdId : undefined,
-        month,
-        token,
-        type,
-      });
+      await exportMonthlyReport({ month, token, type });
+      setShowExport(false);
     } catch {
       setError(`Could not export ${type.toUpperCase()} report.`);
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
   return (
-    <SoraScreen bottomNavCurrent="Profile">
-      <SoraHeader
-        actionIcon={showExport ? "close" : "download-outline"}
-        onAction={() => setShowExport((current) => !current)}
-        title="Reports"
-        subtitle={`${month} · ${summary.count} expenses`}
-      />
-      <SoraError text={error} />
+    <AppScreen bottomNavCurrent="Profile" onRefresh={load} refreshing={loading}>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <AppText color="textMuted" variant="caption">{formatMonthLabel(month)}</AppText>
+          <AppText variant="title">Reports</AppText>
+        </View>
+        <IconButton accessibilityLabel="Export report" icon={showExport ? "close" : "file-export-outline"} onPress={() => setShowExport((current) => !current)} />
+      </View>
+
+      <ErrorState text={error} />
 
       {showExport ? (
-        <SoraCard>
-          <Text style={[styles.blockTitle, { color: colors.text }]}>Download report</Text>
-          <Text style={[styles.exportCopy, { color: colors.muted }]}>
-            Choose a file for {month}. PDF is best for sharing, CSV is best for spreadsheets.
-          </Text>
-          <View style={styles.actionRow}>
-            <AppButton icon="file-pdf-box" mode="contained" loading={exporting} disabled={exporting} onPress={() => exportReport("pdf")}>
-              PDF
-            </AppButton>
-            <AppButton icon="file-delimited-outline" mode="outlined" loading={exporting} disabled={exporting} onPress={() => exportReport("csv")}>
-              CSV
-            </AppButton>
+        <AppCard>
+          <View style={styles.cardHeader}>
+            <AppText variant="headline">Export</AppText>
+            <AppText color="textSubtle" variant="caption">{summary?.expense_count ?? 0} expenses</AppText>
           </View>
-        </SoraCard>
+          <View style={styles.actionRow}>
+            <AppButton compact icon="file-pdf-box" loading={exporting === "pdf"} onPress={() => exportReport("pdf")} variant="secondary">PDF</AppButton>
+            <AppButton compact icon="file-delimited-outline" loading={exporting === "csv"} onPress={() => exportReport("csv")} variant="secondary">CSV</AppButton>
+          </View>
+        </AppCard>
       ) : null}
 
-      <SoraCard tone="purple" style={styles.heroCard}>
-        <Text style={styles.heroLabel}>{scope === "personal" ? "Personal Total" : "Household Total"}</Text>
-        <Text style={styles.heroAmount}>{formatCurrencyCompact(summary.total)}</Text>
-        <Text style={styles.heroMeta}>Budget {formatCurrencyCompact(summary.budget)} · Balance {formatCurrencyCompact(summary.balance)}</Text>
-      </SoraCard>
-
-      <SoraCard>
-        <Text style={[styles.blockTitle, { color: colors.text }]}>Category Chart</Text>
-        <SoraDonutChart
-          rows={summary.categories.map((row) => ({
-            count: row.count,
-            label: row.category_name,
-            value: row.total,
-          }))}
-        />
-      </SoraCard>
-
-      <SoraCard>
-        <Text style={[styles.blockTitle, { color: colors.text }]}>Report Settings</Text>
-        <TextInput label="Month" mode="outlined" value={month} onChangeText={setMonth} style={styles.input} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          <SoraChip active={scope === "personal"} onPress={() => setScope("personal")}>Personal</SoraChip>
-          <SoraChip active={scope === "household"} onPress={() => setScope("household")}>Household</SoraChip>
-        </ScrollView>
-        {scope === "household" ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {households.map((household) => (
-              <SoraChip active={householdId === household.id} key={household.id} onPress={() => setHouseholdId(household.id)}>
-                {household.name}
-              </SoraChip>
-            ))}
-            <SoraChip onPress={() => navigation.navigate("Households")}>+ Household</SoraChip>
-          </ScrollView>
-        ) : null}
-      </SoraCard>
-
-      <SoraSectionHeader title="Category Breakdown" />
-      {loading && !summary.categories.length ? <SoraRowSkeleton rows={5} /> : summary.categories.length ? summary.categories.map((row) => (
-        <SoraCard key={`${row.category_id}-${row.category_name}`} style={styles.rowCard}>
-          <SoraIconRow
-            amount={formatCurrencyCompact(row.total)}
-            icon="chart-donut"
-            iconBackground={soraPalette.purpleSoft}
-            iconColor={colors.accent}
-            meta={`${row.count} expenses`}
-            title={row.category_name}
-          />
-        </SoraCard>
-      )) : <SoraEmpty text="No report data yet." />}
-
-      {scope === "household" && householdReport?.pending_settlements.length ? (
+      {loading && !summary ? (
+        <ReportsSkeleton />
+      ) : (
         <>
-          <SoraSectionHeader title="Pending Settlements" />
-          {householdReport.pending_settlements.map((row) => (
-            <SoraCard key={row.share_id} style={styles.rowCard}>
-              <SoraIconRow
-                amount={formatCurrencyCompact(row.pending_amount)}
-                icon="account-cash-outline"
-                iconBackground={soraPalette.redSurface}
-                iconColor={soraPalette.red}
-                meta={row.status}
-                title={row.name}
-              />
-            </SoraCard>
-          ))}
+          <AppCard elevated style={[styles.primaryCard, { backgroundColor: colors.bgInverse, borderColor: colors.bgInverse }]}>
+            <View style={styles.primaryTop}>
+              <View>
+                <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="caption">Total spent</AppText>
+                <AppText style={{ color: colors.textInverse }} variant="display">{formatCurrencyCompact(total)}</AppText>
+              </View>
+              <View style={[styles.primaryIcon, { backgroundColor: colors.accent }]}>
+                <MaterialCommunityIcons name="chart-line" size={24} color="#FFFFFF" />
+              </View>
+            </View>
+            <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="body">{getComparison(summary, previousSummary, month)}</AppText>
+          </AppCard>
+
+          <AppCard>
+            <View style={styles.monthRow}>
+              <FormField autoCapitalize="none" label="Month" onChangeText={setMonth} placeholder="YYYY-MM" style={styles.monthInput} value={month} />
+              <AppButton compact icon="refresh" onPress={load} style={styles.monthLoadButton} variant="secondary">Load</AppButton>
+            </View>
+          </AppCard>
+
+          <View style={styles.metricGrid}>
+            <Metric label="Budget" value={formatCurrencyCompact(budget)} meta={budget > 0 ? `${budgetUsed}% used` : "Not set"} />
+            <Metric label="Balance" value={formatCurrencyCompact(balance)} meta={balance >= 0 ? "Remaining" : "Exceeded"} tone={balance < 0 ? "danger" : "success"} />
+          </View>
+
+          <AppCard>
+            <View style={styles.cardHeader}>
+              <AppText variant="headline">Where it went</AppText>
+              <AppText color="textSubtle" variant="caption">{summary?.expense_count ?? 0} expenses</AppText>
+            </View>
+            {chartRows.length ? <SoraDonutChart rows={chartRows} size={168} /> : <EmptyState body="Hmm, waiting for expenses to build a category chart." icon="chart-donut" title="No breakdown yet" />}
+          </AppCard>
+
+          <SectionHeader title="Categories" />
+          {(summary?.category_breakdown ?? []).length ? (
+            <AppCard style={styles.listCard}>
+              {summary?.category_breakdown.map((row) => (
+                <ListRow
+                  amount={formatCurrencyCompact(row.total)}
+                  description={`${row.count} expenses`}
+                  icon="chart-donut"
+                  key={`${row.category_id}-${row.category_name}`}
+                  title={row.category_name}
+                />
+              ))}
+            </AppCard>
+          ) : (
+            <EmptyState body="Hmm, waiting for category spending." icon="shape-outline" title="No categories yet" />
+          )}
+
+          <SectionHeader title="Payments" />
+          {(summary?.payment_method_breakdown ?? []).length ? (
+            <AppCard style={styles.listCard}>
+              {summary?.payment_method_breakdown.map((row) => (
+                <ListRow
+                  amount={formatCurrencyCompact(row.total)}
+                  description={`${row.count} expenses`}
+                  icon={row.payment_method === "cash" ? "cash" : row.payment_method === "card" ? "credit-card-outline" : row.payment_method === "bank" ? "bank-outline" : "cellphone"}
+                  key={row.payment_method}
+                  title={formatPaymentMethod(row.payment_method)}
+                />
+              ))}
+            </AppCard>
+          ) : (
+            <EmptyState body="Hmm, waiting for UPI or cash entries." icon="wallet-outline" title="No payments yet" />
+          )}
         </>
-      ) : null}
-    </SoraScreen>
+      )}
+    </AppScreen>
+  );
+}
+
+function ReportsSkeleton() {
+  return (
+    <>
+      <AppCard style={styles.primaryCard}>
+        <SkeletonBlock height={16} width="34%" />
+        <SkeletonBlock height={46} style={styles.skeletonGap} width="62%" />
+        <SkeletonBlock height={16} style={styles.skeletonGap} width="54%" />
+      </AppCard>
+      <AppCard>
+        <SkeletonBlock height={56} />
+      </AppCard>
+      <View style={styles.metricGrid}>
+        <AppCard style={styles.metricCard}>
+          <SkeletonBlock height={14} width="38%" />
+          <SkeletonBlock height={24} style={styles.skeletonGap} width="70%" />
+        </AppCard>
+        <AppCard style={styles.metricCard}>
+          <SkeletonBlock height={14} width="44%" />
+          <SkeletonBlock height={24} style={styles.skeletonGap} width="66%" />
+        </AppCard>
+      </View>
+      <SkeletonList rows={4} />
+    </>
+  );
+}
+
+function Metric({
+  label,
+  meta,
+  tone,
+  value,
+}: {
+  label: string;
+  meta: string;
+  tone?: "success" | "danger";
+  value: string;
+}) {
+  const { colors } = useDs();
+  const valueColor = tone === "success" ? colors.success : tone === "danger" ? colors.danger : colors.text;
+  return (
+    <AppCard style={styles.metricCard}>
+      <AppText color="textMuted" variant="caption">{label}</AppText>
+      <AppText numberOfLines={1} style={{ color: valueColor }} variant="headline">{value}</AppText>
+      <AppText color="textSubtle" numberOfLines={1} variant="caption">{meta}</AppText>
+    </AppCard>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    paddingVertical: 22,
-  },
-  heroLabel: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  heroAmount: {
-    color: "#FFFFFF",
-    fontSize: 38,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  heroMeta: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 15,
-    marginTop: 8,
-  },
-  blockTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    marginBottom: 12,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  chipRow: {
-    gap: 8,
-    paddingBottom: 14,
-    paddingRight: 18,
-  },
   actionRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    gap: dsSpace[1],
+    marginTop: dsSpace[1.5],
   },
-  exportCopy: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 14,
+  cardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1.5],
   },
-  rowCard: {
-    marginBottom: 10,
-    paddingVertical: 10,
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  listCard: {
+    paddingVertical: 0,
+  },
+  metricCard: {
+    flex: 1,
+    marginBottom: 0,
+    minHeight: 96,
+  },
+  metricGrid: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  monthInput: {
+    flex: 1,
+  },
+  monthLoadButton: {
+    marginTop: 25,
+  },
+  monthRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: dsSpace[1],
+  },
+  primaryCard: {
+    paddingVertical: dsSpace[3],
+  },
+  primaryIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  primaryTop: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1],
+  },
+  skeletonGap: {
+    marginTop: dsSpace[1],
   },
 });

@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import { API_BASE_URL, TURNSTILE_SITE_KEY } from "../config/api";
@@ -102,7 +101,7 @@ function buildHtml(theme: "light" | "dark") {
 }
 
 export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
-  const { colors, themeMode } = useAppSettings();
+  const { themeMode } = useAppSettings();
   const html = useMemo(() => buildHtml(themeMode), [themeMode, resetKey]);
   const baseUrl = useMemo(getBaseUrl, []);
 
@@ -138,7 +137,7 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, { borderColor: token ? colors.success : colors.border }]}>
+    <View style={styles.wrap}>
       <WebView
         key={`${themeMode}-${resetKey}`}
         automaticallyAdjustContentInsets={false}
@@ -162,31 +161,18 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
         source={{ baseUrl, html }}
         style={styles.webview}
       />
-
-      <Text style={[styles.status, { color: token ? colors.success : colors.muted }]}>
-        {token ? "Human verification ready" : "Complete human verification"}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  status: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 6,
-    textAlign: "center",
-  },
   webview: {
     backgroundColor: "transparent",
     height: 110,
     width: "100%",
   },
   wrap: {
-    borderRadius: 14,
-    borderWidth: 1,
     marginBottom: 12,
     overflow: "hidden",
-    paddingVertical: 8,
   },
 });

@@ -8,9 +8,9 @@ import { useSoraResponsive } from "../theme/responsive";
 
 const loadingMessages = [
   "Opening Sora Expense...",
-  "Render is waking up. Tiny server stretch break.",
-  "This is taking a bit. Hold on, your money data is getting ready.",
-  "Still here. Free servers can be dramatic after sleeping.",
+  "Hmm, this is taking a tiny minute eh...",
+  "Counting invisible coins. Very serious work.",
+  "Still loading. Sora is putting things in neat little boxes.",
 ];
 
 export function StartupLoadingScreen() {

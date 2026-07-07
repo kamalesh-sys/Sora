@@ -1,8 +1,12 @@
 import { PaymentMethod } from "../types/api";
 
 const paymentLabels: Record<string, string> = {
+  bank: "Bank transfer",
+  card: "Card",
   upi: "UPI",
   cash: "Cash",
+  wallet: "Wallet",
+  other: "Other",
 };
 
 export function parseAmount(value: string | number | null | undefined) {

@@ -20,15 +20,15 @@ type NavItem = {
 };
 
 const leftItems: NavItem[] = [
-  { key: "Home", label: "Home", icon: "home", route: "Home" },
-  { key: "Expenses", label: "Expenses", icon: "receipt-text", route: "Expenses" },
+  { key: "Home", label: "Home", icon: "home-outline", route: "Home" },
+  { key: "Expenses", label: "Expenses", icon: "receipt-text-outline", route: "Expenses" },
 ];
 
 const centerItem: NavItem = { key: "Add", label: "Add", icon: "plus", route: "ExpenseForm" };
 
 const rightItems: NavItem[] = [
-  { key: "Budget", label: "Bills", icon: "file-document", route: "Bills" },
-  { key: "Profile", label: "Reports", icon: "chart-pie", route: "Reports" },
+  { key: "Budget", label: "Bills", icon: "calendar-clock-outline", route: "Bills" },
+  { key: "Profile", label: "Reports", icon: "chart-bar", route: "Reports" },
 ];
 
 const allItems = [...leftItems, centerItem, ...rightItems];
@@ -90,7 +90,7 @@ function NavItemButton({
   const keyframe = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const isAdd = item.key === "Add";
-  const iconColor = isAdd ? "#ffffff" : active ? colors.accent : colors.text;
+  const iconColor = isAdd ? "#ffffff" : active ? colors.accent : colors.muted;
   const rippleColor = isAdd ? "rgba(255,255,255,0.26)" : `${colors.accent}24`;
   const iconLift = keyframe.interpolate({
     inputRange: [0, 0.55, 1],
@@ -234,7 +234,7 @@ function NavItemButton({
             style={[
               styles.label,
               {
-                color: active ? colors.accent : colors.text,
+                color: active ? colors.accent : colors.muted,
                 fontSize: responsive.nav.label,
               },
             ]}
@@ -255,14 +255,14 @@ const styles = StyleSheet.create({
   shell: {
     alignItems: "center",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    elevation: 14,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 8,
     flexDirection: "row",
     shadowColor: "#1D2939",
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
   },
   leftGroup: {
     flex: 2,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "600",
     marginTop: 2,
   },
 });

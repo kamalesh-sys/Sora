@@ -1,10 +1,36 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { MD3DarkTheme, MD3LightTheme } from "react-native-paper";
+import { configureFonts, MD3DarkTheme, MD3LightTheme } from "react-native-paper";
 
 const THEME_MODE_KEY = "sora_expense_theme_mode";
 const ACCENT_KEY = "sora_expense_accent";
 const CUSTOM_ACCENT_KEY = "sora_expense_custom_accent";
+
+const baseInterFonts = configureFonts({
+  config: {
+    fontFamily: "Inter_400Regular",
+  },
+});
+
+const interFonts = {
+  ...baseInterFonts,
+  bodyLarge: { ...baseInterFonts.bodyLarge, fontFamily: "Inter_400Regular", fontWeight: "400" as const },
+  bodyMedium: { ...baseInterFonts.bodyMedium, fontFamily: "Inter_400Regular", fontWeight: "400" as const },
+  bodySmall: { ...baseInterFonts.bodySmall, fontFamily: "Inter_400Regular", fontWeight: "400" as const },
+  default: { ...baseInterFonts.default, fontFamily: "Inter_400Regular", fontWeight: "400" as const },
+  displayLarge: { ...baseInterFonts.displayLarge, fontFamily: "Inter_900Black", fontWeight: "900" as const },
+  displayMedium: { ...baseInterFonts.displayMedium, fontFamily: "Inter_900Black", fontWeight: "900" as const },
+  displaySmall: { ...baseInterFonts.displaySmall, fontFamily: "Inter_800ExtraBold", fontWeight: "800" as const },
+  headlineLarge: { ...baseInterFonts.headlineLarge, fontFamily: "Inter_900Black", fontWeight: "900" as const },
+  headlineMedium: { ...baseInterFonts.headlineMedium, fontFamily: "Inter_800ExtraBold", fontWeight: "800" as const },
+  headlineSmall: { ...baseInterFonts.headlineSmall, fontFamily: "Inter_800ExtraBold", fontWeight: "800" as const },
+  labelLarge: { ...baseInterFonts.labelLarge, fontFamily: "Inter_700Bold", fontWeight: "700" as const },
+  labelMedium: { ...baseInterFonts.labelMedium, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const },
+  labelSmall: { ...baseInterFonts.labelSmall, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const },
+  titleLarge: { ...baseInterFonts.titleLarge, fontFamily: "Inter_800ExtraBold", fontWeight: "800" as const },
+  titleMedium: { ...baseInterFonts.titleMedium, fontFamily: "Inter_700Bold", fontWeight: "700" as const },
+  titleSmall: { ...baseInterFonts.titleSmall, fontFamily: "Inter_700Bold", fontWeight: "700" as const },
+};
 
 export type ThemeMode = "light" | "dark";
 export type AccentName =
@@ -19,7 +45,7 @@ export type AccentName =
   | "custom";
 
 export const accentOptions: { name: AccentName; label: string; color: string }[] = [
-  { name: "blue", label: "Blue", color: "#2563eb" },
+  { name: "blue", label: "Blue", color: "#0052ff" },
   { name: "green", label: "Green", color: "#16a34a" },
   { name: "purple", label: "Purple", color: "#6d28d9" },
   { name: "orange", label: "Orange", color: "#ea580c" },
@@ -66,27 +92,27 @@ function getColors(themeMode: ThemeMode, accent: string): AppColors {
   if (themeMode === "dark") {
     return {
       accent,
-      background: "#0f172a",
-      border: "#273449",
-      card: "#111827",
-      danger: "#f87171",
-      muted: "#94a3b8",
-      success: "#4ade80",
-      text: "#f8fafc",
-      warning: "#fbbf24",
+      background: "#0a0b0d",
+      border: "rgba(138,145,158,0.24)",
+      card: "#141519",
+      danger: "#f0616d",
+      muted: "#8a919e",
+      success: "#27ad75",
+      text: "#ffffff",
+      warning: "#f07836",
     };
   }
 
   return {
     accent,
-    background: "#f8fafc",
-    border: "#e2e8f0",
+    background: "#ffffff",
+    border: "rgba(91,97,110,0.2)",
     card: "#ffffff",
-    danger: "#dc2626",
-    muted: "#64748b",
-    success: "#16a34a",
-    text: "#0f172a",
-    warning: "#d97706",
+    danger: "#cf202f",
+    muted: "#5b616e",
+    success: "#098551",
+    text: "#0a0b0d",
+    warning: "#cf470e",
   };
 }
 
@@ -101,7 +127,7 @@ function isAccentName(value: string | null): value is AccentName {
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>("light");
   const [accentName, setAccentNameState] = useState<AccentName>("blue");
-  const [customAccentColor, setCustomAccentColorState] = useState("#2563eb");
+  const [customAccentColor, setCustomAccentColorState] = useState("#0052ff");
 
   useEffect(() => {
     async function restoreSettings() {
@@ -148,6 +174,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         outline: colors.border,
         error: colors.danger,
       },
+      fonts: interFonts,
     };
   }, [colors, themeMode]);
 

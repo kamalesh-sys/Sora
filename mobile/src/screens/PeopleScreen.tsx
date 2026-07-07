@@ -3,35 +3,50 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Text, TextInput } from "react-native-paper";
 
-import { AppButton } from "../components/AppLayout";
-import { SoraCard, SoraChip, SoraEmpty, SoraError, SoraRowSkeleton, SoraScreen, SoraSectionHeader } from "../components/SoraUI";
-import { useAppSettings } from "../context/AppSettingsContext";
+import {
+  AppButton,
+  AppBottomSheet,
+  AppCard,
+  AppScreen,
+  AppSegmentedControl,
+  AppText,
+  CategoryChip,
+  ErrorState,
+  FormField,
+  IconButton,
+  ListRow,
+  SectionHeader,
+  SkeletonList,
+  useDs,
+} from "../design-system";
+import { dsRadius, dsSpace } from "../design-system/tokens";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import {
-  acceptInvitationById,
-  cancelInvitation,
-  createPerson,
-  declineInvitation,
-  getPeopleOverview,
-  getPersonShareSummary,
-  invitePerson,
-} from "../services/expenseApi";
-import type { PeopleInvitation, Person, PersonLedger } from "../types/api";
-import { formatCurrencyCompact, parseAmount } from "../utils/format";
+import { createExpense, createPerson, createSettlement, deletePerson, getPeopleOverview, getPersonHistory } from "../services/expenseApi";
+import type { Expense, Person, PersonLedger } from "../types/api";
+import { getTodayDate } from "../utils/date";
+import { formatCurrencyCompact, formatDateLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
 type Props = NativeStackScreenProps<RootStackParamList, "People">;
-type PeopleTab = "all" | "owes_me" | "i_owe" | "settled";
+type PeopleTab = "all" | "owes_me" | "i_owe";
+type DebtMode = "owes_me" | "i_owe";
 
-const relations: Person["relation_type"][] = ["family", "friend", "roommate", "relative", "helper", "other"];
+const relations: Array<{ label: string; value: Person["relation_type"]; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = [
+  { icon: "account-heart-outline", label: "Family", value: "family" },
+  { icon: "account-outline", label: "Friend", value: "friend" },
+  { icon: "home-account", label: "Roommate", value: "roommate" },
+  { icon: "account-group-outline", label: "Relative", value: "relative" },
+  { icon: "broom", label: "Helper", value: "helper" },
+  { icon: "dots-horizontal", label: "Other", value: "other" },
+];
+
 const tabs: Array<{ label: string; value: PeopleTab }> = [
   { label: "All", value: "all" },
   { label: "Owes me", value: "owes_me" },
   { label: "I owe", value: "i_owe" },
-  { label: "Settled", value: "settled" },
 ];
+
 const emptyLedger: PersonLedger = {
   pending_balance: "0.00",
   settlements_count: 0,
@@ -39,54 +54,61 @@ const emptyLedger: PersonLedger = {
   total_owed_to_me: "0.00",
 };
 
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "P";
+const avatarColors = ["#2563EB", "#16A34A", "#EA580C", "#7C3AED", "#DB2777", "#0F766E", "#475569"];
+
+function sanitizeAmount(value: string) {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...rest] = cleaned.split(".");
+  const decimal = rest.join("").slice(0, 2);
+  return rest.length ? `${whole}.${decimal}` : whole;
 }
 
-function getInviteOwner(invite: PeopleInvitation) {
-  return invite.invited_by_detail?.first_name || invite.invited_by_detail?.email || "Someone";
+function getPendingShares(history: Expense[], personId: number, userId: number, mode: DebtMode) {
+  return history.flatMap((expense) =>
+    (expense.shares ?? [])
+      .filter((share) => {
+        if (parseAmount(share.pending_amount) <= 0) return false;
+        if (mode === "owes_me") {
+          return share.person === personId && expense.paid_by_user === userId;
+        }
+        return share.user === userId && expense.paid_by_person === personId;
+      })
+      .map((share) => ({ id: share.id, pending: parseAmount(share.pending_amount) }))
+  );
 }
 
 export function PeopleScreen({ navigation }: Props) {
-  const { colors } = useAppSettings();
+  const { colors } = useDs();
   const { user } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
-  const [invitations, setInvitations] = useState<PeopleInvitation[]>([]);
-  const [ledgers, setLedgers] = useState<Record<number, PersonLedger>>({});
+  const [ledgers, setLedgers] = useState<Record<string, PersonLedger>>({});
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [history, setHistory] = useState<Expense[]>([]);
   const [activeTab, setActiveTab] = useState<PeopleTab>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [showInviteForm, setShowInviteForm] = useState(false);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [relation, setRelation] = useState<Person["relation_type"]>("family");
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [relation, setRelation] = useState<Person["relation_type"]>("friend");
+  const [debtMode, setDebtMode] = useState<DebtMode>("owes_me");
+  const [debtAmount, setDebtAmount] = useState("");
+  const [debtTitle, setDebtTitle] = useState("");
+  const [settleMode, setSettleMode] = useState<DebtMode>("owes_me");
+  const [settleAmount, setSettleAmount] = useState("");
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [settling, setSettling] = useState(false);
   const [error, setError] = useState("");
 
-  const isReceivedInvite = useCallback(
-    (invite: PeopleInvitation) => {
-      const emailMatch = invite.email.toLowerCase() === user?.email.toLowerCase();
-      return invite.direction === "received" || (emailMatch && invite.invited_by !== user?.id);
-    },
-    [user?.email, user?.id]
-  );
+  const ledgerFor = useCallback((personId: number) => ledgers[String(personId)] ?? emptyLedger, [ledgers]);
 
   const load = useCallback(async () => {
     setError("");
     try {
       const overview = await getPeopleOverview();
       setPeople(overview.people);
-      setInvitations(overview.invitations);
       setLedgers(overview.ledgers);
     } catch {
       setError("Could not load people.");
@@ -102,60 +124,58 @@ export function PeopleScreen({ navigation }: Props) {
     }, [load, people.length])
   );
 
-  const receivedInvites = useMemo(
-    () => invitations.filter((invite) => invite.status === "pending" && isReceivedInvite(invite)),
-    [invitations, isReceivedInvite]
-  );
-  const sentInvites = useMemo(
-    () => invitations.filter((invite) => !isReceivedInvite(invite)),
-    [invitations, isReceivedInvite]
+  const totals = useMemo(
+    () =>
+      people.reduce(
+        (sum, person) => {
+          const ledger = ledgerFor(person.id);
+          return {
+            iOwe: sum.iOwe + parseAmount(ledger.total_i_owe),
+            owesMe: sum.owesMe + parseAmount(ledger.total_owed_to_me),
+          };
+        },
+        { iOwe: 0, owesMe: 0 }
+      ),
+    [ledgerFor, people]
   );
 
   const filteredPeople = useMemo(() => {
     const query = search.trim().toLowerCase();
     return people.filter((person) => {
-      const ledger = ledgers[person.id] ?? emptyLedger;
+      const ledger = ledgerFor(person.id);
       const owed = parseAmount(ledger.total_owed_to_me);
       const owe = parseAmount(ledger.total_i_owe);
       const matchesQuery =
         !query ||
         person.name.toLowerCase().includes(query) ||
-        person.email?.toLowerCase().includes(query) ||
+        person.phone?.toLowerCase().includes(query) ||
         person.relation_type.includes(query);
 
-      if (!matchesQuery) {
-        return false;
-      }
-      if (activeTab === "owes_me") {
-        return owed > 0;
-      }
-      if (activeTab === "i_owe") {
-        return owe > 0;
-      }
-      if (activeTab === "settled") {
-        return owed <= 0 && owe <= 0;
-      }
+      if (!matchesQuery) return false;
+      if (activeTab === "owes_me") return owed > 0;
+      if (activeTab === "i_owe") return owe > 0;
       return true;
     });
-  }, [activeTab, ledgers, people, search]);
+  }, [activeTab, ledgerFor, people, search]);
 
   const savePerson = async () => {
     if (!name.trim()) {
       setError("Name is required.");
       return;
     }
+
     setSaving(true);
     setError("");
     try {
       await createPerson({
-        email: email.trim() || null,
+        email: null,
         name: name.trim(),
         phone: phone.trim(),
         relation_type: relation,
       });
       setName("");
-      setEmail("");
       setPhone("");
+      setRelation("friend");
       setShowAddForm(false);
       await load();
     } catch {
@@ -165,261 +185,350 @@ export function PeopleScreen({ navigation }: Props) {
     }
   };
 
-  const sendInvite = async () => {
-    const target = inviteEmail.trim();
-    if (!target) {
-      setError("Invite email is required.");
+  const openPerson = async (person: Person) => {
+    const ledger = ledgerFor(person.id);
+    setSettleMode(parseAmount(ledger.total_i_owe) > parseAmount(ledger.total_owed_to_me) ? "i_owe" : "owes_me");
+    setSettleAmount("");
+    setDebtAmount("");
+    setDebtTitle("");
+    setSelectedPerson(person);
+    setHistory([]);
+    setHistoryLoading(true);
+    setError("");
+    try {
+      setHistory(await getPersonHistory(person.id));
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const saveDebt = async () => {
+    if (!selectedPerson || !user) {
+      setError("Login session is missing. Please reopen the app.");
       return;
     }
-    setSaving(true);
-    setError("");
-    try {
-      await invitePerson({ email: target, relation_type: relation });
-      setInviteEmail("");
-      setShowInviteForm(false);
-      await load();
-    } catch {
-      setError("Could not send invite. Check SMTP settings.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
-  const acceptInvite = async (invite: PeopleInvitation) => {
-    setSaving(true);
-    setError("");
-    try {
-      await acceptInvitationById(invite.id);
-      await load();
-    } catch {
-      setError("Could not accept invitation.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const declineInvite = async (invite: PeopleInvitation) => {
-    setSaving(true);
-    setError("");
-    try {
-      await declineInvitation(invite.id);
-      await load();
-    } catch {
-      setError("Could not decline invitation.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const cancelSentInvite = async (invite: PeopleInvitation) => {
-    setSaving(true);
-    setError("");
-    try {
-      await cancelInvitation(invite.id);
-      await load();
-    } catch {
-      setError("Could not cancel invitation.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const showSummary = async () => {
-    if (!selectedPerson) {
+    const amount = Number(debtAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Amount must be greater than 0.");
       return;
     }
+
+    const title = debtTitle.trim() || (debtMode === "owes_me" ? `${selectedPerson.name} owes me` : `I owe ${selectedPerson.name}`);
+
+    setSaving(true);
+    setError("");
     try {
-      const result = await getPersonShareSummary(selectedPerson.id);
-      Alert.alert("Share Summary", result.text);
+      await createExpense({
+        amount: amount.toFixed(2),
+        category: null,
+        expense_date: getTodayDate(),
+        expense_type: "shared",
+        household: null,
+        note: "",
+        paid_by_person: debtMode === "i_owe" ? selectedPerson.id : null,
+        paid_by_user: debtMode === "owes_me" ? "me" : null,
+        payment_method: "upi",
+        split_type: "custom_amount",
+        title,
+        visibility: "shared",
+        participants:
+          debtMode === "owes_me"
+            ? [{ person: selectedPerson.id, share_amount: amount.toFixed(2) }]
+            : [{ user: user.id, share_amount: amount.toFixed(2) }],
+      });
+      setDebtAmount("");
+      setDebtTitle("");
+      await load();
+      await openPerson(selectedPerson);
     } catch {
-      setError("Could not load share summary.");
+      setError("Could not save this entry.");
+    } finally {
+      setSaving(false);
     }
   };
+
+  const settleBalance = async (amountOverride?: number) => {
+    if (!selectedPerson || !user) {
+      setError("Login session is missing. Please reopen the app.");
+      return;
+    }
+
+    const shares = getPendingShares(history, selectedPerson.id, user.id, settleMode);
+    const available = shares.reduce((sum, share) => sum + share.pending, 0);
+    const amount = amountOverride ?? Number(settleAmount);
+
+    if (!shares.length || available <= 0) {
+      setError("No pending balance to settle for this direction.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Settlement amount must be greater than 0.");
+      return;
+    }
+    if (amount > available) {
+      setError(`Settlement can be at most ${formatCurrencyCompact(available)}.`);
+      return;
+    }
+
+    setSettling(true);
+    setError("");
+    try {
+      let remaining = amount;
+      for (const share of shares) {
+        if (remaining <= 0) break;
+        const nextAmount = Math.min(share.pending, remaining);
+        await createSettlement({
+          amount: nextAmount.toFixed(2),
+          expense_share: share.id,
+          method: "upi",
+          note: settleMode === "owes_me" ? `${selectedPerson.name} paid me` : `I paid ${selectedPerson.name}`,
+          status: "completed",
+        });
+        remaining = Number((remaining - nextAmount).toFixed(2));
+      }
+      setSettleAmount("");
+      await load();
+      await openPerson(selectedPerson);
+    } catch {
+      setError("Could not update this balance.");
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  const confirmDeletePerson = () => {
+    if (!selectedPerson) return;
+    Alert.alert("Remove person", "This removes the person from your people list. Existing linked dues may be affected.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setSaving(true);
+          setError("");
+          try {
+            await deletePerson(selectedPerson.id);
+            setSelectedPerson(null);
+            await load();
+          } catch {
+            setError("Could not remove person.");
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const settleAvailable =
+    selectedPerson && user
+      ? getPendingShares(history, selectedPerson.id, user.id, settleMode).reduce((sum, share) => sum + share.pending, 0)
+      : 0;
 
   return (
-    <SoraScreen>
+    <AppScreen>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>People</Text>
-        <View style={styles.headerActions}>
-          <Pressable android_ripple={{ color: `${colors.accent}22`, borderless: true }} onPress={() => setSearchOpen((current) => !current)} style={styles.headerIcon}>
-            <MaterialCommunityIcons name={searchOpen ? "close" : "magnify"} size={28} color={colors.text} />
-          </Pressable>
-          <Pressable android_ripple={{ color: "rgba(255,255,255,0.22)", borderless: true }} onPress={() => setShowAddForm((current) => !current)} style={[styles.plusButton, { backgroundColor: colors.accent }]}>
-            <MaterialCommunityIcons name="plus" size={28} color="#FFFFFF" />
-          </Pressable>
+        <IconButton accessibilityLabel="Go back" icon="arrow-left" onPress={() => navigation.goBack()} />
+        <View style={styles.headerText}>
+          <AppText variant="title">People</AppText>
+          <AppText color="textMuted" variant="caption">
+            Track simple dues without invites.
+          </AppText>
         </View>
+        <IconButton accessibilityLabel={searchOpen ? "Close search" : "Search people"} icon={searchOpen ? "close" : "magnify"} onPress={() => setSearchOpen((current) => !current)} />
       </View>
 
-      <View style={styles.tabs}>
-        {tabs.map((tab) => (
-          <Pressable key={tab.value} onPress={() => setActiveTab(tab.value)} style={styles.tab}>
-            <Text style={[styles.tabText, { color: activeTab === tab.value ? colors.accent : colors.muted }]}>{tab.label}</Text>
-            {activeTab === tab.value ? <View style={[styles.tabLine, { backgroundColor: colors.accent }]} /> : null}
-          </Pressable>
-        ))}
+      <View style={styles.heroRow}>
+        <BalanceTile amount={totals.owesMe} icon="trending-up" label="Owes you" tone="success" />
+        <BalanceTile amount={totals.iOwe} icon="trending-down" label="You owe" tone="danger" />
       </View>
+
+      <AppButton icon="account-plus-outline" onPress={() => setShowAddForm(true)}>
+        Add person
+      </AppButton>
 
       {searchOpen ? (
-        <TextInput
+        <FormField
           autoCapitalize="none"
-          label="Search people"
-          mode="outlined"
           onChangeText={setSearch}
-          style={styles.input}
+          placeholder="Search by name, phone or relation"
+          style={styles.searchField}
           value={search}
         />
       ) : null}
 
-      <SoraError text={error} />
+      <ErrorState text={error} />
 
-      {receivedInvites.length ? (
-        <SoraCard style={[styles.notificationCard, { backgroundColor: `${colors.accent}12`, borderColor: `${colors.accent}32` }]}>
-          <View style={styles.notificationHeader}>
-            <MaterialCommunityIcons name="bell-badge-outline" size={24} color={colors.accent} />
-            <Text style={[styles.notificationTitle, { color: colors.text }]}>Pending invitations</Text>
-          </View>
-          {receivedInvites.map((invite) => (
-            <InviteRequestRow
-              disabled={saving}
-              invite={invite}
-              key={invite.id}
-              onAccept={() => acceptInvite(invite)}
-              onDecline={() => declineInvite(invite)}
-            />
-          ))}
-        </SoraCard>
-      ) : null}
+      <AppSegmentedControl accessibilityLabel="People filter" items={tabs} onChange={setActiveTab} style={styles.tabs} value={activeTab} />
 
-      <InviteBanner onInvite={() => setShowInviteForm((current) => !current)} />
-
-      {showInviteForm ? (
-        <SoraCard>
-          <Text style={[styles.blockTitle, { color: colors.text }]}>Invite by email</Text>
-          <TextInput label="Email" mode="outlined" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" style={styles.input} />
-          <RelationPicker relation={relation} onChange={setRelation} />
-          <AppButton mode="contained" loading={saving} onPress={sendInvite}>Send invite</AppButton>
-        </SoraCard>
-      ) : null}
-
-      {showAddForm ? (
-        <SoraCard>
-          <Text style={[styles.blockTitle, { color: colors.text }]}>Add person</Text>
-          <TextInput label="Name" mode="outlined" value={name} onChangeText={setName} style={styles.input} />
-          <TextInput label="Email" mode="outlined" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" style={styles.input} />
-          <TextInput label="Phone" mode="outlined" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={styles.input} />
-          <RelationPicker relation={relation} onChange={setRelation} />
-          <AppButton mode="contained" loading={saving} onPress={savePerson}>Save person</AppButton>
-        </SoraCard>
-      ) : null}
-
-      <View style={styles.peopleTitleRow}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>People</Text>
-        <Text style={[styles.sectionCount, { color: colors.success }]}>({filteredPeople.length})</Text>
-      </View>
-
+      <SectionHeader title={`People (${filteredPeople.length})`} />
       {loading && !filteredPeople.length ? (
-        <SoraRowSkeleton rows={5} />
+        <SkeletonList rows={3} />
       ) : filteredPeople.length ? (
-        <View style={styles.peopleList}>
+        <AppCard style={styles.listCard}>
           {filteredPeople.map((person) => (
-            <PersonRow
-              key={person.id}
-              ledger={ledgers[person.id] ?? emptyLedger}
-              onPress={() => setSelectedPerson(person)}
-              person={person}
-            />
+            <PersonRow key={person.id} ledger={ledgerFor(person.id)} onPress={() => openPerson(person)} person={person} />
           ))}
-        </View>
+        </AppCard>
       ) : (
-        <SoraEmpty text="No people found." />
+        <EmptyPeople onAdd={() => setShowAddForm(true)} />
       )}
 
+      <AddPersonSheet
+        name={name}
+        onClose={() => setShowAddForm(false)}
+        onNameChange={setName}
+        onPhoneChange={setPhone}
+        onRelationChange={setRelation}
+        onSave={savePerson}
+        phone={phone}
+        relation={relation}
+        saving={saving}
+        visible={showAddForm}
+      />
+
       {selectedPerson ? (
-        <SelectedPersonCard
-          ledger={ledgers[selectedPerson.id] ?? emptyLedger}
-          onClose={() => setSelectedPerson(null)}
-          onSummary={showSummary}
-          person={selectedPerson}
-        />
+        <AppBottomSheet maxHeight="90%" onClose={() => setSelectedPerson(null)} visible={Boolean(selectedPerson)}>
+          <PersonDetail
+            debtAmount={debtAmount}
+            debtMode={debtMode}
+            debtTitle={debtTitle}
+            history={history}
+            historyLoading={historyLoading}
+            ledger={ledgerFor(selectedPerson.id)}
+            onClose={() => setSelectedPerson(null)}
+            onDebtAmountChange={setDebtAmount}
+            onDebtModeChange={setDebtMode}
+            onDebtTitleChange={setDebtTitle}
+            onDelete={confirmDeletePerson}
+            onSaveDebt={saveDebt}
+            onSettleAll={() => settleBalance(settleAvailable)}
+            onSettleAmountChange={(value) => setSettleAmount(sanitizeAmount(value))}
+            onSettleBalance={() => settleBalance()}
+            onSettleModeChange={setSettleMode}
+            person={selectedPerson}
+            saving={saving}
+            settleAmount={settleAmount}
+            settleAvailable={settleAvailable}
+            settleMode={settleMode}
+            settling={settling}
+          />
+        </AppBottomSheet>
       ) : null}
-
-      {sentInvites.length ? (
-        <>
-          <SoraSectionHeader title="Sent Invites" />
-          {sentInvites.map((invite) => (
-            <SentInviteRow
-              disabled={saving}
-              invite={invite}
-              key={invite.id}
-              onCancel={() => cancelSentInvite(invite)}
-            />
-          ))}
-        </>
-      ) : null}
-    </SoraScreen>
+    </AppScreen>
   );
 }
 
-function RelationPicker({ relation, onChange }: { relation: Person["relation_type"]; onChange: (value: Person["relation_type"]) => void }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-      {relations.map((item) => (
-        <SoraChip active={relation === item} key={item} onPress={() => onChange(item)}>
-          {item}
-        </SoraChip>
-      ))}
-    </ScrollView>
-  );
-}
-
-function InviteBanner({ onInvite }: { onInvite: () => void }) {
-  const { colors } = useAppSettings();
-  return (
-    <View style={styles.inviteBanner}>
-      <View style={styles.inviteText}>
-        <Text style={styles.inviteTitle}>Invite your friends or family</Text>
-        <Text style={styles.inviteCopy}>Track and settle expenses together</Text>
-        <AppButton compact mode="contained" onPress={onInvite} style={styles.inviteButton}>Invite</AppButton>
-      </View>
-      <View style={styles.avatarStack}>
-        {["account", "account-heart", "account-star"].map((icon, index) => (
-          <View key={icon} style={[styles.smallAvatar, { backgroundColor: index === 0 ? "#DBEAFE" : index === 1 ? "#DCFCE7" : "#EDE9FE", marginLeft: index ? -8 : 0 }]}>
-            <MaterialCommunityIcons name={icon as keyof typeof MaterialCommunityIcons.glyphMap} size={24} color={index === 0 ? colors.accent : index === 1 ? colors.success : "#7C3AED"} />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function InviteRequestRow({
-  disabled,
-  invite,
-  onAccept,
-  onDecline,
+function AddPersonSheet({
+  name,
+  onClose,
+  onNameChange,
+  onPhoneChange,
+  onRelationChange,
+  onSave,
+  phone,
+  relation,
+  saving,
+  visible,
 }: {
-  disabled: boolean;
-  invite: PeopleInvitation;
-  onAccept: () => void;
-  onDecline: () => void;
+  name: string;
+  onClose: () => void;
+  onNameChange: (value: string) => void;
+  onPhoneChange: (value: string) => void;
+  onRelationChange: (value: Person["relation_type"]) => void;
+  onSave: () => void;
+  phone: string;
+  relation: Person["relation_type"];
+  saving: boolean;
+  visible: boolean;
 }) {
-  const { colors } = useAppSettings();
   return (
-    <View style={[styles.inviteRequest, { borderColor: colors.border }]}>
-      <View style={styles.inviteRequestText}>
-        <Text style={[styles.inviteRequestTitle, { color: colors.text }]}>{getInviteOwner(invite)} invited you</Text>
-        <Text style={[styles.inviteRequestMeta, { color: colors.muted }]}>{invite.relation_type} connection for shared expenses</Text>
+    <AppBottomSheet
+      footer={<AppButton block disabled={saving} loading={saving} onPress={onSave}>Save person</AppButton>}
+      onClose={onClose}
+      title="Add person"
+      visible={visible}
+    >
+      <View style={styles.previewRow}>
+        <Avatar name={name || "New"} size={56} />
+        <View style={styles.previewText}>
+          <AppText variant="bodyStrong">Name is enough</AppText>
+          <AppText color="textMuted" variant="caption">Email is not needed for simple dues.</AppText>
+        </View>
       </View>
-      <View style={styles.inviteActions}>
-        <AppButton compact mode="contained" disabled={disabled} onPress={onAccept}>Accept</AppButton>
-        <AppButton compact mode="text" disabled={disabled} onPress={onDecline}>Decline</AppButton>
+      <FormField label="Name" onChangeText={onNameChange} placeholder="Rahul, Mom, Roommate" style={styles.field} value={name} />
+      <FormField keyboardType="phone-pad" label="Phone optional" onChangeText={onPhoneChange} placeholder="Optional" style={styles.field} value={phone} />
+      <AppText color="textMuted" style={styles.fieldLabel} variant="label">
+        Relation
+      </AppText>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        {relations.map((item) => (
+          <CategoryChip
+            active={relation === item.value}
+            icon={item.icon}
+            key={item.value}
+            label={item.label}
+            onPress={() => onRelationChange(item.value)}
+          />
+        ))}
+      </ScrollView>
+    </AppBottomSheet>
+  );
+}
+
+function BalanceTile({
+  amount,
+  icon,
+  label,
+  tone,
+}: {
+  amount: number;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  tone: "danger" | "success";
+}) {
+  const { colors } = useDs();
+  const color = tone === "success" ? colors.success : colors.danger;
+  const background = tone === "success" ? colors.successBg : colors.dangerBg;
+  return (
+    <AppCard style={[styles.balanceTile, { backgroundColor: background, borderColor: background }]}>
+      <View style={styles.balanceTop}>
+        <AppText color="textMuted" variant="caption">
+          {label}
+        </AppText>
+        <View style={[styles.balanceIcon, { backgroundColor: colors.surface }]}>
+          <MaterialCommunityIcons name={icon} size={20} color={color} />
+        </View>
       </View>
+      <AppText numberOfLines={1} style={{ color }} variant="headline">
+        {formatCurrencyCompact(amount)}
+      </AppText>
+    </AppCard>
+  );
+}
+
+function Avatar({ name, size = 48 }: { name: string; size?: number }) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "S";
+  const color = avatarColors[name.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % avatarColors.length];
+  return (
+    <View style={[styles.avatar, { backgroundColor: color, borderRadius: size / 2, height: size, width: size }]}>
+      <AppText style={styles.avatarText} variant="bodyStrong">
+        {initials}
+      </AppText>
     </View>
   );
 }
 
 function PersonRow({ ledger, onPress, person }: { ledger: PersonLedger; onPress: () => void; person: Person }) {
-  const { colors } = useAppSettings();
+  const { colors } = useDs();
   const owed = parseAmount(ledger.total_owed_to_me);
   const owe = parseAmount(ledger.total_i_owe);
   const status =
@@ -427,317 +536,332 @@ function PersonRow({ ledger, onPress, person }: { ledger: PersonLedger; onPress:
       ? { color: colors.success, text: `Owes you ${formatCurrencyCompact(owed)}` }
       : owe > 0
         ? { color: colors.danger, text: `You owe ${formatCurrencyCompact(owe)}` }
-        : { color: colors.muted, text: "No dues" };
+        : ledger.settlements_count > 0
+          ? { color: colors.textSubtle, text: "Settled" }
+          : { color: colors.textSubtle, text: "No dues" };
 
   return (
-    <Pressable android_ripple={{ color: `${colors.accent}14` }} onPress={onPress} style={styles.personRow}>
-      <View style={[styles.avatar, { backgroundColor: person.linked_user ? `${colors.success}18` : `${colors.accent}16` }]}>
-        <Text style={[styles.avatarText, { color: person.linked_user ? colors.success : colors.accent }]}>{getInitials(person.name)}</Text>
+    <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress}>
+      <View style={[styles.personRow, { borderBottomColor: colors.border }]}>
+        <Avatar name={person.name} />
+        <View style={styles.personText}>
+          <AppText numberOfLines={1} variant="bodyStrong">
+            {person.name}
+          </AppText>
+          <AppText numberOfLines={1} style={{ color: status.color }} variant="caption">
+            {status.text}
+          </AppText>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSubtle} />
       </View>
-      <View style={styles.personText}>
-        <Text numberOfLines={1} style={[styles.personName, { color: colors.text }]}>{person.name}</Text>
-        <Text numberOfLines={1} style={[styles.personMeta, { color: status.color }]}>{status.text}</Text>
-      </View>
-      <MaterialCommunityIcons name="chevron-right" size={26} color={colors.border} />
     </Pressable>
   );
 }
 
-function SelectedPersonCard({
+function PersonDetail({
+  debtAmount,
+  debtMode,
+  debtTitle,
+  history,
+  historyLoading,
   ledger,
   onClose,
-  onSummary,
+  onDebtAmountChange,
+  onDebtModeChange,
+  onDebtTitleChange,
+  onDelete,
+  onSaveDebt,
+  onSettleAll,
+  onSettleAmountChange,
+  onSettleBalance,
+  onSettleModeChange,
   person,
+  saving,
+  settleAmount,
+  settleAvailable,
+  settleMode,
+  settling,
 }: {
+  debtAmount: string;
+  debtMode: DebtMode;
+  debtTitle: string;
+  history: Expense[];
+  historyLoading: boolean;
   ledger: PersonLedger;
   onClose: () => void;
-  onSummary: () => void;
+  onDebtAmountChange: (value: string) => void;
+  onDebtModeChange: (value: DebtMode) => void;
+  onDebtTitleChange: (value: string) => void;
+  onDelete: () => void;
+  onSaveDebt: () => void;
+  onSettleAll: () => void;
+  onSettleAmountChange: (value: string) => void;
+  onSettleBalance: () => void;
+  onSettleModeChange: (value: DebtMode) => void;
   person: Person;
+  saving: boolean;
+  settleAmount: string;
+  settleAvailable: number;
+  settleMode: DebtMode;
+  settling: boolean;
 }) {
-  const { colors } = useAppSettings();
   return (
-    <SoraCard tone="purple" style={styles.selectedCard}>
-      <View style={styles.selectedHeader}>
-        <View>
-          <Text style={styles.selectedName}>{person.name}</Text>
-          <Text style={styles.selectedMeta}>{person.email || person.relation_type}</Text>
+    <View style={styles.detailPanel}>
+      <View style={styles.detailHeader}>
+        <Avatar name={person.name} size={60} />
+        <View style={styles.detailIdentity}>
+          <AppText variant="headline">{person.name}</AppText>
+          <AppText color="textMuted" style={styles.capitalize} variant="caption">
+            {person.relation_type}
+          </AppText>
         </View>
-        <Pressable android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: true }} onPress={onClose}>
-          <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
-        </Pressable>
+        <IconButton accessibilityLabel="Remove person" icon="trash-can-outline" onPress={onDelete} tone="danger" />
+        <IconButton accessibilityLabel="Close person detail" icon="close" onPress={onClose} />
       </View>
-      <View style={styles.ledgerGrid}>
-        <View>
-          <Text style={styles.ledgerLabel}>Owes you</Text>
-          <Text style={styles.ledgerValue}>{formatCurrencyCompact(ledger.total_owed_to_me)}</Text>
+
+      <View style={styles.ledgerRow}>
+        <LedgerValue label="Owes you" tone="success" value={ledger.total_owed_to_me} />
+        <LedgerValue label="You owe" tone="danger" value={ledger.total_i_owe} />
+      </View>
+
+      <View style={styles.debtBox}>
+        <AppText style={styles.fieldLabel} variant="bodyStrong">
+          Add entry
+        </AppText>
+        <View style={styles.debtModeRow}>
+          <CategoryChip active={debtMode === "owes_me"} icon="arrow-down-left" label="They owe me" onPress={() => onDebtModeChange("owes_me")} />
+          <CategoryChip active={debtMode === "i_owe"} icon="arrow-up-right" label="I owe them" onPress={() => onDebtModeChange("i_owe")} />
         </View>
-        <View>
-          <Text style={styles.ledgerLabel}>You owe</Text>
-          <Text style={styles.ledgerValue}>{formatCurrencyCompact(ledger.total_i_owe)}</Text>
+        <FormField keyboardType="decimal-pad" label="Amount" onChangeText={onDebtAmountChange} placeholder="0" style={styles.field} value={debtAmount} />
+        <FormField label="Reason optional" onChangeText={onDebtTitleChange} placeholder="Tea, cab, groceries" style={styles.field} value={debtTitle} />
+        <AppButton disabled={saving} loading={saving} onPress={onSaveDebt}>
+          Save entry
+        </AppButton>
+      </View>
+
+      <View style={styles.debtBox}>
+        <AppText style={styles.fieldLabel} variant="bodyStrong">
+          Update balance
+        </AppText>
+        <View style={styles.debtModeRow}>
+          <CategoryChip active={settleMode === "owes_me"} icon="cash-plus" label="They paid me" onPress={() => onSettleModeChange("owes_me")} />
+          <CategoryChip active={settleMode === "i_owe"} icon="cash-minus" label="I paid them" onPress={() => onSettleModeChange("i_owe")} />
+        </View>
+        <FormField
+          keyboardType="decimal-pad"
+          label="Amount paid"
+          onChangeText={onSettleAmountChange}
+          placeholder={settleAvailable > 0 ? `Up to ${formatCurrencyCompact(settleAvailable)}` : "0"}
+          style={styles.field}
+          value={settleAmount}
+        />
+        <View style={styles.settleActions}>
+          <AppButton disabled={settling || settleAvailable <= 0} loading={settling} onPress={onSettleBalance} style={styles.settleActionButton}>
+            Update
+          </AppButton>
+          <AppButton disabled={settling || settleAvailable <= 0} onPress={onSettleAll} style={styles.settleActionButton} variant="secondary">
+            Settle all
+          </AppButton>
         </View>
       </View>
-      <AppButton mode="contained-tonal" textColor={colors.accent} onPress={onSummary}>Share summary</AppButton>
-    </SoraCard>
+
+      <SectionHeader title="History" />
+      {historyLoading ? (
+        <SkeletonList rows={3} />
+      ) : history.length ? (
+        history.map((expense) => <HistoryRow expense={expense} key={expense.id} person={person} />)
+      ) : (
+        <AppText color="textMuted" variant="body">
+          No history with this person yet.
+        </AppText>
+      )}
+    </View>
   );
 }
 
-function SentInviteRow({ disabled, invite, onCancel }: { disabled: boolean; invite: PeopleInvitation; onCancel: () => void }) {
-  const { colors } = useAppSettings();
+function LedgerValue({ label, tone, value }: { label: string; tone: "danger" | "success"; value: string }) {
+  const { colors } = useDs();
+  const color = tone === "success" ? colors.success : colors.danger;
   return (
-    <SoraCard style={styles.sentInviteCard}>
-      <View style={styles.sentInviteRow}>
-        <View style={[styles.mailIcon, { backgroundColor: invite.status === "pending" ? `${colors.accent}14` : colors.background }]}>
-          <MaterialCommunityIcons name="email-outline" size={22} color={invite.status === "pending" ? colors.accent : colors.muted} />
-        </View>
-        <View style={styles.personText}>
-          <Text numberOfLines={1} style={[styles.personName, { color: colors.text }]}>{invite.email}</Text>
-          <Text style={[styles.personMeta, { color: colors.muted }]}>{invite.relation_type} - {invite.status}</Text>
-        </View>
-        {invite.status === "pending" ? <AppButton compact mode="text" disabled={disabled} onPress={onCancel}>Cancel</AppButton> : null}
+    <View style={styles.ledgerValue}>
+      <AppText color="textMuted" variant="caption">
+        {label}
+      </AppText>
+      <AppText style={{ color }} variant="headline">
+        {formatCurrencyCompact(value)}
+      </AppText>
+    </View>
+  );
+}
+
+function HistoryRow({ expense, person }: { expense: Expense; person: Person }) {
+  const { colors } = useDs();
+  const paidByPerson = expense.paid_by_person === person.id;
+  const tone = paidByPerson ? colors.danger : colors.success;
+  const direction = paidByPerson ? "You owe" : "Owes you";
+  return (
+    <ListRow
+      amount={formatCurrencyCompact(expense.amount)}
+      description={`${direction} | ${formatDateLabel(expense.expense_date)} | ${formatPaymentMethod(expense.payment_method)}`}
+      icon={paidByPerson ? "arrow-up-right" : "arrow-down-left"}
+      iconColor={tone}
+      title={expense.title}
+    />
+  );
+}
+
+function EmptyPeople({ onAdd }: { onAdd: () => void }) {
+  return (
+    <AppCard>
+      <View style={styles.emptyPeople}>
+        <MaterialCommunityIcons name="account-group-outline" size={36} color="#64748B" />
+        <AppText style={styles.emptyTitle} variant="headline">
+          No people yet
+        </AppText>
+        <AppText color="textMuted" style={styles.emptyBody} variant="body">
+          Add people you share daily expenses with. No email invites required.
+        </AppText>
+        <AppButton icon="account-plus-outline" onPress={onAdd} variant="secondary">
+          Add person
+        </AppButton>
       </View>
-    </SoraCard>
+    </AppCard>
   );
 }
 
 const styles = StyleSheet.create({
   avatar: {
     alignItems: "center",
-    borderRadius: 26,
-    height: 52,
     justifyContent: "center",
-    marginRight: 14,
-    width: 52,
-  },
-  avatarStack: {
-    alignItems: "center",
-    flexDirection: "row",
   },
   avatarText: {
-    fontSize: 16,
-    fontWeight: "900",
+    color: "#FFFFFF",
   },
-  blockTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    marginBottom: 12,
+  balanceIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  balanceTile: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  balanceTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1],
+  },
+  capitalize: {
+    textTransform: "capitalize",
   },
   chipRow: {
-    gap: 8,
-    paddingBottom: 14,
-    paddingRight: 18,
+    gap: dsSpace[1],
+    paddingBottom: dsSpace[1.5],
+    paddingRight: dsSpace[2],
+  },
+  debtBox: {
+    marginBottom: dsSpace[1],
+  },
+  debtModeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[1.5],
+  },
+  detailPanel: {
+    paddingBottom: dsSpace[1],
+  },
+  detailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
+  },
+  detailIdentity: {
+    flex: 1,
+    minWidth: 0,
+  },
+  emptyBody: {
+    marginBottom: dsSpace[2],
+    maxWidth: 260,
+    textAlign: "center",
+  },
+  emptyPeople: {
+    alignItems: "center",
+    paddingVertical: dsSpace[3],
+  },
+  emptyTitle: {
+    marginTop: dsSpace[1],
+  },
+  field: {
+    marginBottom: dsSpace[1.5],
+  },
+  fieldLabel: {
+    marginBottom: dsSpace[1],
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
   },
-  headerActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-  },
-  headerIcon: {
-    alignItems: "center",
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  inviteActions: {
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  inviteBanner: {
-    alignItems: "flex-end",
-    backgroundColor: "#FEF9C3",
-    borderRadius: 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 18,
-    padding: 18,
-  },
-  inviteButton: {
-    alignSelf: "flex-start",
-    marginTop: 12,
-  },
-  inviteCopy: {
-    color: "#64748B",
-    fontSize: 14,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-  inviteRequest: {
-    alignItems: "center",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    paddingTop: 12,
-  },
-  inviteRequestMeta: {
-    fontSize: 13,
-    marginTop: 3,
-  },
-  inviteRequestText: {
+  headerText: {
     flex: 1,
     minWidth: 0,
   },
-  inviteRequestTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  inviteText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  inviteTitle: {
-    color: "#0F172A",
-    fontSize: 17,
-    fontWeight: "900",
-    lineHeight: 22,
-  },
-  ledgerGrid: {
+  heroRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
   },
-  ledgerLabel: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 13,
-    fontWeight: "800",
+  ledgerRow: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
   },
   ledgerValue: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "900",
-    marginTop: 3,
+    flex: 1,
   },
-  mailIcon: {
-    alignItems: "center",
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    marginRight: 12,
-    width: 44,
-  },
-  notificationCard: {
-    gap: 12,
-  },
-  notificationHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  notificationTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  peopleList: {
-    marginBottom: 18,
-  },
-  peopleTitleRow: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  personMeta: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  personName: {
-    fontSize: 17,
-    fontWeight: "900",
+  listCard: {
+    paddingVertical: 0,
   },
   personRow: {
     alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    minHeight: 72,
-    paddingVertical: 10,
+    gap: dsSpace[1.5],
+    minHeight: 76,
+    paddingVertical: dsSpace[1.5],
   },
   personText: {
     flex: 1,
     minWidth: 0,
   },
-  plusButton: {
-    alignItems: "center",
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  sectionCount: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  selectedCard: {
-    marginTop: 4,
-  },
-  selectedHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-  selectedMeta: {
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 15,
-    marginTop: 3,
-  },
-  selectedName: {
-    color: "#FFFFFF",
-    fontSize: 25,
-    fontWeight: "900",
-  },
-  sentInviteCard: {
-    marginBottom: 10,
-    paddingVertical: 10,
-  },
-  sentInviteRow: {
+  previewRow: {
     alignItems: "center",
     flexDirection: "row",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
   },
-  smallAvatar: {
-    alignItems: "center",
-    borderColor: "#FFFFFF",
-    borderRadius: 23,
-    borderWidth: 3,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
+  previewText: {
+    flex: 1,
+    minWidth: 0,
   },
-  tab: {
-    alignItems: "center",
-    minHeight: 38,
-    paddingHorizontal: 4,
+  searchField: {
+    marginTop: dsSpace[2],
   },
-  tabLine: {
-    borderRadius: 999,
-    height: 2,
-    marginTop: 8,
-    width: 24,
+  settleActionButton: {
+    flex: 1,
   },
-  tabText: {
-    fontSize: 15,
-    fontWeight: "800",
+  settleActions: {
+    flexDirection: "row",
+    gap: dsSpace[1],
   },
   tabs: {
-    borderBottomColor: "#E5E7EB",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 26,
-    marginBottom: 18,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
+    marginBottom: dsSpace[2],
+    marginTop: dsSpace[2],
   },
 });
