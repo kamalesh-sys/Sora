@@ -1,9 +1,10 @@
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useFeedback } from "../context/FeedbackContext";
@@ -36,7 +37,11 @@ const allItems = [...leftItems, centerItem, ...rightItems];
 export function BottomNav({ current }: { current: BottomNavKey }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useAppSettings();
+  const insets = useSafeAreaInsets();
   const responsive = useSoraResponsive();
+  const bottomInset = Platform.OS === "android" ? Math.max(insets.bottom, 0) : insets.bottom;
+  const navHeight = responsive.nav.height + bottomInset;
+  const navPaddingBottom = responsive.nav.paddingBottom + bottomInset;
 
   const renderItem = (item: NavItem) => {
     return (
@@ -57,8 +62,9 @@ export function BottomNav({ current }: { current: BottomNavKey }) {
         {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
-          minHeight: responsive.nav.height,
-          paddingBottom: responsive.nav.paddingBottom,
+          height: navHeight,
+          minHeight: navHeight,
+          paddingBottom: navPaddingBottom,
           paddingHorizontal: responsive.nav.paddingHorizontal,
           paddingTop: responsive.nav.paddingTop,
         },

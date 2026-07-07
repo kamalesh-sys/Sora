@@ -58,6 +58,36 @@ export function clearApiCache() {
   inFlightGets.clear();
 }
 
+function firstMessage(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return firstMessage(value[0]);
+  }
+  if (typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+    return (
+      firstMessage(objectValue.detail) ||
+      firstMessage(objectValue.non_field_errors) ||
+      firstMessage(objectValue.email) ||
+      firstMessage(objectValue.password) ||
+      firstMessage(objectValue.name) ||
+      firstMessage(Object.values(objectValue)[0])
+    );
+  }
+  return "";
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const message = firstMessage(error.response?.data);
+    if (message) return message;
+    if (error.code === "ECONNABORTED") return "Request timed out. Try again.";
+    if (!error.response) return "Could not reach the server. Check your connection.";
+  }
+  return fallback;
+}
+
 client.interceptors.response.use(
   (response) => {
     if ((response.config.method ?? "get").toLowerCase() !== "get") {

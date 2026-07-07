@@ -1,6 +1,7 @@
 import logging
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -65,8 +66,22 @@ def register(request):
 
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    user = serializer.save()
-    seed_default_categories(user)
+    try:
+        with transaction.atomic():
+            user = serializer.save()
+            seed_default_categories(user)
+    except IntegrityError:
+        logger.exception("Account creation failed due to an integrity error.")
+        return Response(
+            {"detail": "Could not create account. Try a different email."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        logger.exception("Account setup failed.")
+        return Response(
+            {"detail": "Could not finish account setup. Try again."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     return _auth_response(user)
 
 

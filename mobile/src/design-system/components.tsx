@@ -19,7 +19,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets, type Edge } from "react-native-safe-area-context";
 
 import { BottomNav, BottomNavKey } from "../components/BottomNav";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -68,6 +68,7 @@ export function AppScreen({
 }) {
   const { colors } = useDs();
   const responsive = useSoraResponsive();
+  const safeAreaEdges: Edge[] | undefined = bottomNavCurrent ? ["top", "left", "right"] : undefined;
   const content = [
     styles.screenContent,
     {
@@ -80,7 +81,7 @@ export function AppScreen({
   ];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
+    <SafeAreaView edges={safeAreaEdges} style={[styles.safeArea, { backgroundColor: colors.bg }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
@@ -261,12 +262,14 @@ export function CategoryChip({
   label,
   onLongPress,
   onPress,
+  style,
 }: {
   active?: boolean;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   onLongPress?: () => void;
   onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useDs();
   return (
@@ -282,6 +285,7 @@ export function CategoryChip({
           backgroundColor: active ? colors.accent : colors.surface,
           borderColor: active ? colors.accent : colors.border,
         },
+        style,
       ]}
     >
       {icon ? <MaterialCommunityIcons name={icon} size={18} color={active ? "#FFFFFF" : colors.textMuted} /> : null}
@@ -297,13 +301,15 @@ export function PaymentModeChip({
   icon,
   label,
   onPress,
+  style,
 }: {
   active?: boolean;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
 }) {
-  return <CategoryChip active={active} icon={icon} label={label} onPress={onPress} />;
+  return <CategoryChip active={active} icon={icon} label={label} onPress={onPress} style={style} />;
 }
 
 export function IconButton({

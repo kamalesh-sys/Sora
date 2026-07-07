@@ -20,6 +20,7 @@ export type DonutChartRow = {
   label: string;
   value: string | number;
   count?: number;
+  color?: string;
 };
 
 export function SoraDonutChart({
@@ -71,7 +72,7 @@ export function SoraDonutChart({
                 cy={center}
                 fill="transparent"
                 r={radius}
-                stroke={chartColors[index % chartColors.length]}
+                stroke={row.color ?? chartColors[index % chartColors.length]}
                 strokeDasharray={`${length} ${circumference - length}`}
                 strokeDashoffset={dashOffset}
                 strokeLinecap="butt"
@@ -93,7 +94,7 @@ export function SoraDonutChart({
           const percent = total ? Math.round((value / total) * 100) : 0;
           return (
             <View key={`${row.label}-${index}`} style={styles.legendRow}>
-              <View style={[styles.dot, { backgroundColor: chartColors[index % chartColors.length] }]} />
+              <View style={[styles.dot, { backgroundColor: row.color ?? chartColors[index % chartColors.length] }]} />
               <View style={styles.legendText}>
                 <Text numberOfLines={1} style={[styles.legendLabel, { color: colors.text }]}>
                   {row.label}

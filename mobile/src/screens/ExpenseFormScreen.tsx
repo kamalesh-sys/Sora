@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import {
+  Alert,
+  Animated,
+  LayoutAnimation,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  UIManager,
+  View,
+} from "react-native";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -35,15 +48,16 @@ import {
 } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
 import type { CreateExpensePayload, ExpenseCategory, ExpenseVisibility, PaymentMethod } from "../types/api";
+import { applySavedCategoryOrder, saveCategoryOrder } from "../utils/categoryOrder";
 import { getTodayDate, isValidDate } from "../utils/date";
 import { formatDateLabel } from "../utils/format";
 import { updateSoraExpenseWidget } from "../widgets/widgetStorage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ExpenseForm">;
 
-const CATEGORY_ORDER_KEY = "sora_expense_add_expense_category_order";
 const RECENT_PAYMENT_KEY = "sora_expense_recent_payment_mode";
 const RECENT_CATEGORY_KEY = "sora_expense_recent_category_id";
+const CATEGORY_DRAG_STEP = 112;
 
 const paymentModes: Array<{ label: string; value: PaymentMethod }> = [
   { label: "UPI", value: "upi" },
@@ -64,21 +78,8 @@ function fromDateInputValue(value: string) {
   return new Date(`${value}T00:00:00`);
 }
 
-async function applySavedCategoryOrder(rows: ExpenseCategory[]) {
-  try {
-    const rawOrder = await AsyncStorage.getItem(CATEGORY_ORDER_KEY);
-    const savedIds = rawOrder ? (JSON.parse(rawOrder) as number[]) : [];
-    if (!Array.isArray(savedIds) || !savedIds.length) {
-      return rows;
-    }
-
-    const byId = new Map(rows.map((item) => [item.id, item]));
-    const ordered = savedIds.map((id) => byId.get(id)).filter((item): item is ExpenseCategory => Boolean(item));
-    const missing = rows.filter((item) => !savedIds.includes(item.id));
-    return [...ordered, ...missing];
-  } catch {
-    return rows;
-  }
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
 function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod) {
@@ -97,6 +98,10 @@ function sanitizeAmount(value: string) {
 
 function normalizePaymentMethod(value?: string | null): PaymentMethod {
   return value === "cash" ? "cash" : "upi";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 export function ExpenseFormScreen({ navigation, route }: Props) {
@@ -126,6 +131,22 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   );
   const cleanAmount = Number(amount);
   const amountError = amountTouched && (!Number.isFinite(cleanAmount) || cleanAmount <= 0) ? "Enter an amount greater than 0." : "";
+
+  const reorderCategories = useCallback((categoryId: number, targetIndex: number) => {
+    setCategories((current) => {
+      const fromIndex = current.findIndex((item) => item.id === categoryId);
+      if (fromIndex < 0 || fromIndex === targetIndex) return current;
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(clamp(targetIndex, 0, next.length), 0, moved);
+      LayoutAnimation.configureNext({
+        duration: 180,
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+      });
+      void saveCategoryOrder(next);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setError("");
@@ -292,21 +313,13 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
           />
 
           <SectionHeader action="Manage" onAction={() => navigation.navigate("Categories")} title="Category" />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-            {categories.map((item) => {
-              const visual = getCategoryVisual(item.name, item.icon, item.color);
-              return (
-                <CategoryChip
-                  active={category === item.id}
-                  icon={visual.icon}
-                  key={item.id}
-                  label={item.name}
-                  onPress={() => setCategory(item.id)}
-                />
-              );
-            })}
-            <CategoryChip icon="plus" label="New" onPress={() => navigation.navigate("Categories")} />
-          </ScrollView>
+          <ReorderableCategoryRail
+            categories={categories}
+            onManage={() => navigation.navigate("Categories")}
+            onReorder={reorderCategories}
+            onSelect={setCategory}
+            selectedId={category}
+          />
 
           <SectionHeader title="Payment" />
           <AppSegmentedControl accessibilityLabel="Payment method" items={paymentModes} onChange={setPaymentMethod} style={styles.paymentSwitch} value={paymentMethod} />
@@ -363,6 +376,157 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   );
 }
 
+function ReorderableCategoryRail({
+  categories,
+  onManage,
+  onReorder,
+  onSelect,
+  selectedId,
+}: {
+  categories: ExpenseCategory[];
+  onManage: () => void;
+  onReorder: (categoryId: number, targetIndex: number) => void;
+  onSelect: (categoryId: number) => void;
+  selectedId: number | null;
+}) {
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+
+  const startDrag = (categoryId: number) => {
+    void Haptics.selectionAsync();
+    setDraggingId(categoryId);
+  };
+
+  const endDrag = () => {
+    setDraggingId(null);
+  };
+
+  return (
+    <ScrollView
+      horizontal
+      scrollEnabled={!draggingId}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.rail}
+    >
+      {categories.map((item, index) => {
+        const visual = getCategoryVisual(item.name, item.icon, item.color);
+        return (
+          <DraggableCategoryChip
+            category={item}
+            dragging={draggingId === item.id}
+            icon={visual.icon}
+            index={index}
+            key={item.id}
+            onActivate={() => startDrag(item.id)}
+            onDragEnd={endDrag}
+            onMoveIndex={(targetIndex) => onReorder(item.id, targetIndex)}
+            onSelect={() => {
+              if (!draggingId) onSelect(item.id);
+            }}
+            selected={selectedId === item.id}
+            total={categories.length}
+          />
+        );
+      })}
+      <CategoryChip icon="plus" label="New" onPress={onManage} style={styles.categoryChip} />
+    </ScrollView>
+  );
+}
+
+function DraggableCategoryChip({
+  category,
+  dragging,
+  icon,
+  index,
+  onActivate,
+  onDragEnd,
+  onMoveIndex,
+  onSelect,
+  selected,
+  total,
+}: {
+  category: ExpenseCategory;
+  dragging: boolean;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  index: number;
+  onActivate: () => void;
+  onDragEnd: () => void;
+  onMoveIndex: (targetIndex: number) => void;
+  onSelect: () => void;
+  selected: boolean;
+  total: number;
+}) {
+  const pan = useRef(new Animated.Value(0)).current;
+  const startIndex = useRef(index);
+  const lastTargetIndex = useRef(index);
+  const wasDragging = useRef(false);
+
+  useEffect(() => {
+    if (dragging && !wasDragging.current) {
+      startIndex.current = index;
+      lastTargetIndex.current = index;
+      wasDragging.current = true;
+    }
+    if (!dragging && wasDragging.current) {
+      wasDragging.current = false;
+      Animated.spring(pan, {
+        friction: 8,
+        tension: 160,
+        toValue: 0,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [dragging, index, pan]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => dragging && Math.abs(gesture.dx) > 4,
+        onPanResponderMove: (_, gesture) => {
+          if (!dragging) return;
+          pan.setValue(gesture.dx);
+          const targetIndex = clamp(startIndex.current + Math.round(gesture.dx / CATEGORY_DRAG_STEP), 0, total - 1);
+          if (targetIndex !== lastTargetIndex.current) {
+            lastTargetIndex.current = targetIndex;
+            onMoveIndex(targetIndex);
+          }
+        },
+        onPanResponderRelease: () => {
+          onDragEnd();
+        },
+        onPanResponderTerminate: () => {
+          onDragEnd();
+        },
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [dragging, onDragEnd, onMoveIndex, pan, total]
+  );
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      style={[
+        styles.draggableChip,
+        dragging ? styles.draggingChip : null,
+        {
+          transform: [
+            { translateX: dragging ? pan : 0 },
+            { scale: dragging ? 1.04 : 1 },
+          ],
+        },
+      ]}
+    >
+      <CategoryChip
+        active={selected}
+        icon={icon}
+        label={category.name}
+        onLongPress={onActivate}
+        onPress={dragging ? undefined : onSelect}
+        style={styles.categoryChip}
+      />
+    </Animated.View>
+  );
+}
+
 function ExpenseFormSkeleton() {
   return (
     <View>
@@ -388,6 +552,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: dsSpace[2],
     minHeight: 48,
+  },
+  draggableChip: {
+    zIndex: 1,
+  },
+  draggingChip: {
+    elevation: 6,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    zIndex: 20,
+  },
+  categoryChip: {
+    justifyContent: "center",
+    maxWidth: 128,
+    minWidth: 104,
   },
   header: {
     alignItems: "center",
@@ -426,6 +606,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   rail: {
+    alignItems: "center",
     gap: dsSpace[1],
     paddingBottom: dsSpace[1],
     paddingRight: dsSpace[3],

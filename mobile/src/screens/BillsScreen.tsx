@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import {
+  AppBottomSheet,
   AppButton,
   AppCard,
   AppScreen,
@@ -33,6 +34,7 @@ import {
   getRecurringBills,
   markBillPaid,
   skipBillOccurrence,
+  updateRecurringBill,
   updateBudget,
 } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
@@ -103,11 +105,14 @@ export function BillsScreen({}: Props) {
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [editingBill, setEditingBill] = useState<RecurringBill | null>(null);
+  const [selectedOccurrence, setSelectedOccurrence] = useState<BillOccurrence | null>(null);
   const [billName, setBillName] = useState("");
   const [billAmount, setBillAmount] = useState("");
   const [billDate, setBillDate] = useState(getTodayDate());
   const [billCategory, setBillCategory] = useState<number | null>(null);
   const [billMethod, setBillMethod] = useState<PaymentMethod>("upi");
+  const [billNote, setBillNote] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetNote, setBudgetNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -158,15 +163,24 @@ export function BillsScreen({}: Props) {
   );
 
   const openOccurrences = useMemo(
-    () => occurrences.filter((item) => !["paid", "skipped"].includes(item.status)).sort((a, b) => a.due_date.localeCompare(b.due_date)),
+    () =>
+      occurrences
+        .filter((item) => item.recurring_bill_detail?.is_active !== false && !["paid", "skipped"].includes(item.status))
+        .sort((a, b) => a.due_date.localeCompare(b.due_date)),
     [occurrences]
   );
   const historyOccurrences = useMemo(
-    () => occurrences.filter((item) => ["paid", "skipped", "overdue"].includes(getOccurrenceStatus(item))).sort((a, b) => b.due_date.localeCompare(a.due_date)),
+    () =>
+      occurrences
+        .filter((item) => {
+          const status = getOccurrenceStatus(item);
+          if (["paid", "skipped"].includes(status)) return true;
+          return status === "overdue" && item.recurring_bill_detail?.is_active !== false;
+        })
+        .sort((a, b) => b.due_date.localeCompare(a.due_date)),
     [occurrences]
   );
   const activeBills = useMemo(() => bills.filter((bill) => bill.is_active), [bills]);
-  const dueSoonCount = openOccurrences.filter((item) => daysUntil(item.due_date) <= 7).length;
   const upcomingTotal = openOccurrences.reduce((sum, item) => sum + parseAmount(item.amount), 0);
   const recurringTotal = activeBills.reduce((sum, bill) => sum + parseAmount(bill.amount), 0);
   const spent = parseAmount(monthlySummary?.total_expense);
@@ -175,6 +189,35 @@ export function BillsScreen({}: Props) {
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
   const rows = tab === "history" ? historyOccurrences : tab === "recurring" ? activeBills : openOccurrences;
   const initialLoading = loading && !occurrences.length && !bills.length && !monthlySummary;
+
+  const resetBillForm = useCallback(() => {
+    setEditingBill(null);
+    setBillName("");
+    setBillAmount("");
+    setBillDate(getTodayDate());
+    setBillCategory(categories[0]?.id ?? null);
+    setBillMethod("upi");
+    setBillNote("");
+    setError("");
+  }, [categories]);
+
+  const openAddBill = () => {
+    resetBillForm();
+    setShowAdd(true);
+  };
+
+  const openEditBill = (bill: RecurringBill) => {
+    setSelectedOccurrence(null);
+    setEditingBill(bill);
+    setBillName(bill.name);
+    setBillAmount(bill.amount);
+    setBillDate(bill.next_due_date);
+    setBillCategory(bill.category);
+    setBillMethod(bill.payment_method);
+    setBillNote(bill.note ?? "");
+    setError("");
+    setShowAdd(true);
+  };
 
   const refresh = () => {
     setRefreshing(true);
@@ -190,25 +233,58 @@ export function BillsScreen({}: Props) {
     setSaving(true);
     setError("");
     try {
-      await createRecurringBill({
+      const payload = {
         amount: amount.toFixed(2),
         category: billCategory,
         frequency: "monthly",
         name: billName.trim(),
         next_due_date: billDate,
+        note: billNote.trim(),
         payment_method: billMethod,
-      });
-      setBillName("");
-      setBillAmount("");
-      setBillDate(getTodayDate());
+      } as const;
+      if (editingBill) {
+        await updateRecurringBill(editingBill.id, payload);
+      } else {
+        await createRecurringBill(payload);
+      }
+      resetBillForm();
       setShowAdd(false);
       setTab("recurring");
       await load();
     } catch {
-      setError("Could not create recurring bill.");
+      setError(editingBill ? "Could not update recurring bill." : "Could not create recurring bill.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const confirmDeleteRecurring = (bill: RecurringBill) => {
+    Alert.alert("Remove recurring bill", `${bill.name} will be removed from recurring payments.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setSaving(true);
+          setError("");
+          try {
+            await updateRecurringBill(bill.id, { is_active: false });
+            if (editingBill?.id === bill.id) {
+              setShowAdd(false);
+              setEditingBill(null);
+            }
+            if (selectedOccurrence?.recurring_bill === bill.id) {
+              setSelectedOccurrence(null);
+            }
+            await load();
+          } catch {
+            setError("Could not remove recurring bill.");
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
   };
 
   const saveBudget = async () => {
@@ -293,7 +369,7 @@ export function BillsScreen({}: Props) {
         <View style={styles.headerText}>
           <AppText variant="title">Bills & Budget</AppText>
         </View>
-        <IconButton accessibilityLabel="Add recurring bill" icon={showAdd ? "close" : "plus"} onPress={() => setShowAdd((current) => !current)} tone="primary" />
+        <IconButton accessibilityLabel="Add recurring bill" icon="plus" onPress={openAddBill} tone="primary" />
       </View>
 
       <ErrorState text={error} />
@@ -356,10 +432,10 @@ export function BillsScreen({}: Props) {
           {tab === "recurring" ? (
             activeBills.length ? (
               <AppCard style={styles.listCard}>
-                {activeBills.map((bill) => <RecurringBillRow bill={bill} key={bill.id} />)}
+                {activeBills.map((bill) => <RecurringBillRow bill={bill} key={bill.id} onPress={() => openEditBill(bill)} />)}
               </AppCard>
             ) : (
-              <EmptyState action="Add bill" body="Rent, electricity, subscriptions and other recurring payments can be tracked here." icon="calendar-refresh-outline" onAction={() => setShowAdd(true)} title="No recurring bills" />
+              <EmptyState action="Add bill" body="Rent, electricity, subscriptions and other recurring payments can be tracked here." icon="calendar-refresh-outline" onAction={openAddBill} title="No recurring bills" />
             )
           ) : rows.length ? (
             <AppCard style={styles.listCard}>
@@ -368,6 +444,7 @@ export function BillsScreen({}: Props) {
                   key={occurrence.id}
                   occurrence={occurrence}
                   onMarkPaid={tab === "upcoming" ? () => confirmMarkPaid(occurrence) : undefined}
+                  onOpen={() => setSelectedOccurrence(occurrence)}
                   onSkip={tab === "upcoming" ? () => confirmSkip(occurrence) : undefined}
                 />
               ))}
@@ -377,7 +454,7 @@ export function BillsScreen({}: Props) {
               action="Add recurring bill"
               body={tab === "history" ? "Paid and skipped bills will appear here." : "Your next recurring bill will appear here when it is due."}
               icon="calendar-check-outline"
-              onAction={() => setShowAdd(true)}
+              onAction={openAddBill}
               title={tab === "history" ? "No bill history" : "No upcoming bills"}
             />
           )}
@@ -390,16 +467,32 @@ export function BillsScreen({}: Props) {
         billDate={billDate}
         billMethod={billMethod}
         billName={billName}
+        billNote={billNote}
         categories={categories}
+        editingBill={editingBill}
         onAmountChange={(value) => setBillAmount(sanitizeAmount(value))}
         onCategoryChange={setBillCategory}
-        onClose={() => setShowAdd(false)}
+        onClose={() => {
+          setShowAdd(false);
+          setEditingBill(null);
+        }}
         onDateChange={setBillDate}
         onMethodChange={setBillMethod}
         onNameChange={setBillName}
+        onNoteChange={setBillNote}
+        onRemove={editingBill ? () => confirmDeleteRecurring(editingBill) : undefined}
         onSave={saveBill}
         saving={saving}
         visible={showAdd}
+      />
+      <OccurrenceDetailSheet
+        occurrence={selectedOccurrence}
+        onClose={() => setSelectedOccurrence(null)}
+        onEditRecurring={(bill) => openEditBill(bill)}
+        onMarkPaid={confirmMarkPaid}
+        onRemoveRecurring={confirmDeleteRecurring}
+        onSkip={confirmSkip}
+        saving={saving}
       />
     </AppScreen>
   );
@@ -536,13 +629,17 @@ function AddBillSheet({
   billDate,
   billMethod,
   billName,
+  billNote,
   categories,
+  editingBill,
   onAmountChange,
   onCategoryChange,
   onClose,
   onDateChange,
   onMethodChange,
   onNameChange,
+  onNoteChange,
+  onRemove,
   onSave,
   saving,
   visible,
@@ -552,74 +649,94 @@ function AddBillSheet({
   billDate: string;
   billMethod: PaymentMethod;
   billName: string;
+  billNote: string;
   categories: ExpenseCategory[];
+  editingBill: RecurringBill | null;
   onAmountChange: (value: string) => void;
   onCategoryChange: (value: number | null) => void;
   onClose: () => void;
   onDateChange: (value: string) => void;
   onMethodChange: (value: PaymentMethod) => void;
   onNameChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onRemove?: () => void;
   onSave: () => void;
   saving: boolean;
   visible: boolean;
 }) {
   const { colors } = useDs();
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.sheetRoot}>
-        <Pressable accessibilityLabel="Close add bill" style={StyleSheet.absoluteFill} onPress={onClose} />
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetKeyboard}>
-          <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.borderStrong }]} />
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <View style={styles.sheetHeader}>
-                <AppText variant="headline">Add recurring bill</AppText>
-                <IconButton accessibilityLabel="Close add recurring bill" icon="close" onPress={onClose} />
-              </View>
-              <FormField label="Bill name" onChangeText={onNameChange} placeholder="Electricity, rent, internet" style={styles.fieldGap} value={billName} />
-              <FormField keyboardType="decimal-pad" label="Amount" onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={billAmount} />
-              <FormField autoCapitalize="none" label="Next due date" onChangeText={onDateChange} placeholder="YYYY-MM-DD" style={styles.fieldGap} value={billDate} />
-
-              <AppText color="textMuted" style={styles.filterLabel} variant="label">Category</AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-                <CategoryChip active={billCategory === null} label="None" onPress={() => onCategoryChange(null)} />
-                {categories.map((item) => {
-                  const visual = getCategoryVisual(item.name, item.icon, item.color);
-                  return (
-                    <CategoryChip
-                      active={billCategory === item.id}
-                      icon={visual.icon}
-                      key={item.id}
-                      label={item.name}
-                      onPress={() => onCategoryChange(item.id)}
-                    />
-                  );
-                })}
-              </ScrollView>
-
-              <AppText color="textMuted" style={styles.filterLabel} variant="label">Payment</AppText>
-              <View style={styles.paymentGrid}>
-                {paymentModes.map((item) => (
-                  <CategoryChip active={billMethod === item.value} icon={item.icon} key={item.value} label={item.label} onPress={() => onMethodChange(item.value)} />
-                ))}
-              </View>
-
-              <AppButton block disabled={saving} loading={saving} onPress={onSave}>Save bill</AppButton>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+    <AppBottomSheet
+      footer={
+        <View style={styles.sheetFooterActions}>
+          <AppButton block disabled={saving} loading={saving} onPress={onSave}>
+            {editingBill ? "Save changes" : "Save bill"}
+          </AppButton>
+          {editingBill && onRemove ? (
+            <AppButton block disabled={saving} icon="trash-can-outline" onPress={onRemove} variant="danger">
+              Remove recurring bill
+            </AppButton>
+          ) : null}
+        </View>
+      }
+      maxHeight="92%"
+      onClose={onClose}
+      title={editingBill ? "Edit recurring bill" : "Add recurring bill"}
+      visible={visible}
+    >
+      <View style={styles.billEditorHero}>
+        <View style={[styles.billEditorIcon, { backgroundColor: colors.accent }]}>
+          <MaterialCommunityIcons name="calendar-refresh-outline" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.billEditorText}>
+          <AppText variant="bodyStrong">{billName || "Recurring payment"}</AppText>
+          <AppText color="textMuted" numberOfLines={1} variant="caption">
+            {editingBill ? "Update amount, category or next due date." : "Monthly bills, subscriptions and repeat payments."}
+          </AppText>
+        </View>
       </View>
-    </Modal>
+
+      <FormField label="Bill name" onChangeText={onNameChange} placeholder="Electricity, rent, internet" style={styles.fieldGap} value={billName} />
+      <FormField keyboardType="decimal-pad" label="Amount" onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={billAmount} />
+      <FormField autoCapitalize="none" label="Next due date" onChangeText={onDateChange} placeholder="YYYY-MM-DD" style={styles.fieldGap} value={billDate} />
+
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">Category</AppText>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+        {categories.map((item) => {
+          const visual = getCategoryVisual(item.name, item.icon, item.color);
+          return (
+            <CategoryChip
+              active={billCategory === item.id}
+              icon={visual.icon}
+              key={item.id}
+              label={item.name}
+              onPress={() => onCategoryChange(item.id)}
+            />
+          );
+        })}
+      </ScrollView>
+
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">Payment</AppText>
+      <View style={styles.paymentGrid}>
+        {paymentModes.map((item) => (
+          <CategoryChip active={billMethod === item.value} icon={item.icon} key={item.value} label={item.label} onPress={() => onMethodChange(item.value)} />
+        ))}
+      </View>
+
+      <FormField label="Note optional" onChangeText={onNoteChange} placeholder="Plan, account or reminder" style={styles.fieldGap} value={billNote} />
+    </AppBottomSheet>
   );
 }
 
 function BillOccurrenceRow({
   occurrence,
   onMarkPaid,
+  onOpen,
   onSkip,
 }: {
   occurrence: BillOccurrence;
   onMarkPaid?: () => void;
+  onOpen: () => void;
   onSkip?: () => void;
 }) {
   const { colors } = useDs();
@@ -635,6 +752,7 @@ function BillOccurrenceRow({
         description={`${getDueText(occurrence)} | ${bill?.payment_method?.toUpperCase() ?? "UPI"}`}
         icon={visual.icon}
         iconColor={tone}
+        onPress={onOpen}
         rightLabel={status}
         title={bill?.name ?? "Bill"}
       />
@@ -648,7 +766,7 @@ function BillOccurrenceRow({
   );
 }
 
-function RecurringBillRow({ bill }: { bill: RecurringBill }) {
+function RecurringBillRow({ bill, onPress }: { bill: RecurringBill; onPress: () => void }) {
   const visual = getCategoryVisual(bill.category_detail?.name, bill.category_detail?.icon, bill.category_detail?.color);
   return (
     <ListRow
@@ -656,14 +774,116 @@ function RecurringBillRow({ bill }: { bill: RecurringBill }) {
       description={`${bill.frequency} | Next ${formatDateLabel(bill.next_due_date)}`}
       icon={visual.icon}
       iconColor={visual.color}
+      onPress={onPress}
+      rightLabel="Edit"
       title={bill.name}
     />
+  );
+}
+
+function OccurrenceDetailSheet({
+  occurrence,
+  onClose,
+  onEditRecurring,
+  onMarkPaid,
+  onRemoveRecurring,
+  onSkip,
+  saving,
+}: {
+  occurrence: BillOccurrence | null;
+  onClose: () => void;
+  onEditRecurring: (bill: RecurringBill) => void;
+  onMarkPaid: (occurrence: BillOccurrence) => void;
+  onRemoveRecurring: (bill: RecurringBill) => void;
+  onSkip: (occurrence: BillOccurrence) => void;
+  saving: boolean;
+}) {
+  const { colors } = useDs();
+  if (!occurrence) return null;
+
+  const bill = occurrence.recurring_bill_detail;
+  const status = getOccurrenceStatus(occurrence);
+  const visual = getCategoryVisual(bill?.category_detail?.name, bill?.category_detail?.icon, bill?.category_detail?.color);
+  const tone = status === "overdue" ? colors.danger : status === "paid" ? colors.success : status === "skipped" ? colors.textSubtle : colors.accent;
+  const canResolve = status === "upcoming" || status === "overdue";
+
+  return (
+    <AppBottomSheet maxHeight="86%" onClose={onClose} title="Bill details" visible={Boolean(occurrence)}>
+      <View style={styles.occurrenceHero}>
+        <View style={[styles.occurrenceIcon, { backgroundColor: `${tone}18` }]}>
+          <MaterialCommunityIcons name={visual.icon} size={28} color={tone} />
+        </View>
+        <View style={styles.occurrenceHeroText}>
+          <AppText variant="headline">{bill?.name ?? "Recurring bill"}</AppText>
+          <AppText color="textMuted" variant="caption">
+            {getDueText(occurrence)}
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.detailGrid}>
+        <DetailTile label="Amount" value={formatCurrencyCompact(occurrence.amount)} />
+        <DetailTile label="Payment" value={bill?.payment_method?.toUpperCase() ?? "UPI"} />
+        <DetailTile label="Due date" value={formatDateLabel(occurrence.due_date)} />
+        <DetailTile label="Status" tone={tone} value={status} />
+      </View>
+
+      {canResolve ? (
+        <View style={styles.sheetActionRow}>
+          <AppButton disabled={saving} icon="check-circle-outline" onPress={() => onMarkPaid(occurrence)} style={styles.sheetActionButton} variant="secondary">
+            Mark paid
+          </AppButton>
+          <AppButton disabled={saving} icon="calendar-remove-outline" onPress={() => onSkip(occurrence)} style={styles.sheetActionButton} variant="tertiary">
+            Skip
+          </AppButton>
+        </View>
+      ) : null}
+
+      {bill ? (
+        <View style={styles.sheetFooterActions}>
+          <AppButton block icon="pencil-outline" onPress={() => onEditRecurring(bill)} variant="secondary">
+            Edit recurring payment
+          </AppButton>
+          <AppButton block disabled={saving} icon="trash-can-outline" onPress={() => onRemoveRecurring(bill)} variant="danger">
+            Remove recurring payment
+          </AppButton>
+        </View>
+      ) : null}
+    </AppBottomSheet>
+  );
+}
+
+function DetailTile({ label, tone, value }: { label: string; tone?: string; value: string }) {
+  return (
+    <AppCard style={styles.detailTile}>
+      <AppText color="textMuted" variant="caption">{label}</AppText>
+      <AppText numberOfLines={1} style={tone ? { color: tone, textTransform: "capitalize" } : undefined} variant="bodyStrong">
+        {value}
+      </AppText>
+    </AppCard>
   );
 }
 
 const styles = StyleSheet.create({
   billBlock: {
     marginBottom: dsSpace[1],
+  },
+  billEditorHero: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
+  },
+  billEditorIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 52,
+    justifyContent: "center",
+    width: 52,
+  },
+  billEditorText: {
+    flex: 1,
+    minWidth: 0,
   },
   budgetEnd: {
     alignItems: "flex-end",
@@ -687,6 +907,18 @@ const styles = StyleSheet.create({
   filterLabel: {
     marginBottom: dsSpace[1],
     marginTop: dsSpace[1],
+  },
+  detailGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[1],
+  },
+  detailTile: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    marginBottom: 0,
+    minHeight: 74,
   },
   header: {
     alignItems: "center",
@@ -738,6 +970,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[1],
   },
+  occurrenceHero: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
+  },
+  occurrenceHeroText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  occurrenceIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 60,
+    justifyContent: "center",
+    width: 60,
+  },
   paymentGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -772,40 +1021,21 @@ const styles = StyleSheet.create({
   segmented: {
     marginBottom: dsSpace[2],
   },
+  sheetActionButton: {
+    flex: 1,
+  },
+  sheetActionRow: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[1.5],
+  },
+  sheetFooterActions: {
+    gap: dsSpace[1],
+  },
   skeletonGap: {
     marginTop: dsSpace[1],
   },
   skeletonGapLarge: {
     marginTop: dsSpace[2],
-  },
-  sheet: {
-    borderTopLeftRadius: dsRadius.xl,
-    borderTopRightRadius: dsRadius.xl,
-    maxHeight: "86%",
-    padding: dsSpace[2],
-    paddingBottom: dsSpace[3],
-    width: "100%",
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    borderRadius: dsRadius.pill,
-    height: 4,
-    marginBottom: dsSpace[2],
-    width: 42,
-  },
-  sheetHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: dsSpace[2],
-  },
-  sheetKeyboard: {
-    justifyContent: "flex-end",
-    width: "100%",
-  },
-  sheetRoot: {
-    backgroundColor: "rgba(10,11,13,0.42)",
-    flex: 1,
-    justifyContent: "flex-end",
   },
 });

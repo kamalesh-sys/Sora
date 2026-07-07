@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
@@ -27,7 +28,10 @@ class RegisterSerializer(serializers.Serializer):
         return email
 
     def validate_password(self, value):
-        validate_password(value)
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages)) from exc
         return value
 
     def create(self, validated_data):

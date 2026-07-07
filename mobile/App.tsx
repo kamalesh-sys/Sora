@@ -6,8 +6,11 @@ import {
   Inter_800ExtraBold,
   Inter_900Black,
 } from "@expo-google-fonts/inter";
+import { useCallback, useEffect } from "react";
 import { useFonts } from "expo-font";
+import * as NavigationBar from "expo-navigation-bar";
 import { NavigationContainer, type LinkingOptions } from "@react-navigation/native";
+import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { PaperProvider } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -60,6 +63,33 @@ function AppShell() {
     Inter_900Black,
   });
 
+  const syncAndroidNavigationBar = useCallback(() => {
+    if (Platform.OS !== "android") return;
+
+    const background = themeMode === "dark" ? "#0A0B0D" : "#FFFFFF";
+    const buttonStyle = themeMode === "dark" ? "light" : "dark";
+    const edgeStyle = themeMode === "dark" ? "dark" : "light";
+
+    try {
+      NavigationBar.setStyle(edgeStyle);
+    } catch {
+      // Android system-bar APIs vary by API level and device navigation mode.
+    }
+
+    void Promise.all([
+      NavigationBar.setVisibilityAsync("visible"),
+      NavigationBar.setPositionAsync("relative"),
+      NavigationBar.setBehaviorAsync("inset-touch"),
+      NavigationBar.setBackgroundColorAsync(background),
+      NavigationBar.setBorderColorAsync(background),
+      NavigationBar.setButtonStyleAsync(buttonStyle),
+    ]).catch(() => undefined);
+  }, [themeMode]);
+
+  useEffect(() => {
+    syncAndroidNavigationBar();
+  }, [syncAndroidNavigationBar]);
+
   if (!fontsLoaded) {
     return <StartupLoadingScreen />;
   }
@@ -68,7 +98,11 @@ function AppShell() {
     <PaperProvider theme={paperTheme}>
       <FeedbackProvider>
         <AuthProvider>
-          <NavigationContainer linking={linking}>
+          <NavigationContainer
+            linking={linking}
+            onReady={syncAndroidNavigationBar}
+            onStateChange={syncAndroidNavigationBar}
+          >
             <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
             <RootNavigator />
           </NavigationContainer>

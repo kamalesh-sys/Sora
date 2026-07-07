@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Button, Text } from "react-native-paper";
 import type { ButtonProps } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { BottomNav, BottomNavKey } from "./BottomNav";
@@ -39,6 +39,7 @@ export function Screen({
   const { colors } = useAppSettings();
   const responsive = useSoraResponsive();
   const backgroundStyle = { backgroundColor: colors.background };
+  const safeAreaEdges: Edge[] | undefined = bottomNavCurrent ? ["top", "left", "right"] : undefined;
   const baseContentStyle = [
     styles.content,
     {
@@ -48,7 +49,7 @@ export function Screen({
 
   if (!scroll) {
     return (
-      <SafeAreaView style={[styles.safeArea, backgroundStyle]}>
+      <SafeAreaView edges={safeAreaEdges} style={[styles.safeArea, backgroundStyle]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
@@ -62,7 +63,7 @@ export function Screen({
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, backgroundStyle]}>
+    <SafeAreaView edges={safeAreaEdges} style={[styles.safeArea, backgroundStyle]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}

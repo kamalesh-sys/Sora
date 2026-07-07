@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useSoraResponsive } from "../theme/responsive";
@@ -39,6 +39,7 @@ export function SoraScreen({
 }) {
   const { colors } = useAppSettings();
   const responsive = useSoraResponsive();
+  const safeAreaEdges: Edge[] | undefined = bottomNavCurrent ? ["top", "left", "right"] : undefined;
   const contentStyle = [
     styles.content,
     {
@@ -51,7 +52,7 @@ export function SoraScreen({
   ];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={safeAreaEdges} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}

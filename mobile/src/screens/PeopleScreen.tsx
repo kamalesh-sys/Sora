@@ -17,6 +17,7 @@ import {
   IconButton,
   ListRow,
   SectionHeader,
+  SkeletonBlock,
   SkeletonList,
   useDs,
 } from "../design-system";
@@ -89,7 +90,6 @@ export function PeopleScreen({ navigation }: Props) {
   const [search, setSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [relation, setRelation] = useState<Person["relation_type"]>("friend");
   const [debtMode, setDebtMode] = useState<DebtMode>("owes_me");
   const [debtAmount, setDebtAmount] = useState("");
@@ -170,11 +170,10 @@ export function PeopleScreen({ navigation }: Props) {
       await createPerson({
         email: null,
         name: name.trim(),
-        phone: phone.trim(),
+        phone: "",
         relation_type: relation,
       });
       setName("");
-      setPhone("");
       setRelation("friend");
       setShowAddForm(false);
       await load();
@@ -334,9 +333,6 @@ export function PeopleScreen({ navigation }: Props) {
         <IconButton accessibilityLabel="Go back" icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
           <AppText variant="title">People</AppText>
-          <AppText color="textMuted" variant="caption">
-            Track simple dues without invites.
-          </AppText>
         </View>
         <IconButton accessibilityLabel={searchOpen ? "Close search" : "Search people"} icon={searchOpen ? "close" : "magnify"} onPress={() => setSearchOpen((current) => !current)} />
       </View>
@@ -381,10 +377,8 @@ export function PeopleScreen({ navigation }: Props) {
         name={name}
         onClose={() => setShowAddForm(false)}
         onNameChange={setName}
-        onPhoneChange={setPhone}
         onRelationChange={setRelation}
         onSave={savePerson}
-        phone={phone}
         relation={relation}
         saving={saving}
         visible={showAddForm}
@@ -426,10 +420,8 @@ function AddPersonSheet({
   name,
   onClose,
   onNameChange,
-  onPhoneChange,
   onRelationChange,
   onSave,
-  phone,
   relation,
   saving,
   visible,
@@ -437,10 +429,8 @@ function AddPersonSheet({
   name: string;
   onClose: () => void;
   onNameChange: (value: string) => void;
-  onPhoneChange: (value: string) => void;
   onRelationChange: (value: Person["relation_type"]) => void;
   onSave: () => void;
-  phone: string;
   relation: Person["relation_type"];
   saving: boolean;
   visible: boolean;
@@ -452,15 +442,10 @@ function AddPersonSheet({
       title="Add person"
       visible={visible}
     >
-      <View style={styles.previewRow}>
-        <Avatar name={name || "New"} size={56} />
-        <View style={styles.previewText}>
-          <AppText variant="bodyStrong">Name is enough</AppText>
-          <AppText color="textMuted" variant="caption">Email is not needed for simple dues.</AppText>
-        </View>
+      <View style={styles.addPreview}>
+        <Avatar name={name || "New"} size={64} />
       </View>
       <FormField label="Name" onChangeText={onNameChange} placeholder="Rahul, Mom, Roommate" style={styles.field} value={name} />
-      <FormField keyboardType="phone-pad" label="Phone optional" onChangeText={onPhoneChange} placeholder="Optional" style={styles.field} value={phone} />
       <AppText color="textMuted" style={styles.fieldLabel} variant="label">
         Relation
       </AppText>
@@ -605,6 +590,7 @@ function PersonDetail({
   settleMode: DebtMode;
   settling: boolean;
 }) {
+  const { colors } = useDs();
   return (
     <View style={styles.detailPanel}>
       <View style={styles.detailHeader}>
@@ -624,10 +610,14 @@ function PersonDetail({
         <LedgerValue label="You owe" tone="danger" value={ledger.total_i_owe} />
       </View>
 
-      <View style={styles.debtBox}>
-        <AppText style={styles.fieldLabel} variant="bodyStrong">
-          Add entry
-        </AppText>
+      <AppCard style={styles.detailActionCard}>
+        <View style={styles.actionCardHeader}>
+          <View>
+            <AppText variant="bodyStrong">Add entry</AppText>
+            <AppText color="textMuted" variant="caption">Create a new due with {person.name}.</AppText>
+          </View>
+          <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.textMuted} />
+        </View>
         <View style={styles.debtModeRow}>
           <CategoryChip active={debtMode === "owes_me"} icon="arrow-down-left" label="They owe me" onPress={() => onDebtModeChange("owes_me")} />
           <CategoryChip active={debtMode === "i_owe"} icon="arrow-up-right" label="I owe them" onPress={() => onDebtModeChange("i_owe")} />
@@ -637,12 +627,18 @@ function PersonDetail({
         <AppButton disabled={saving} loading={saving} onPress={onSaveDebt}>
           Save entry
         </AppButton>
-      </View>
+      </AppCard>
 
-      <View style={styles.debtBox}>
-        <AppText style={styles.fieldLabel} variant="bodyStrong">
-          Update balance
-        </AppText>
+      <AppCard style={styles.detailActionCard}>
+        <View style={styles.actionCardHeader}>
+          <View>
+            <AppText variant="bodyStrong">Record payment</AppText>
+            <AppText color="textMuted" variant="caption">
+              {settleAvailable > 0 ? `Available ${formatCurrencyCompact(settleAvailable)}` : "No pending amount in this direction"}
+            </AppText>
+          </View>
+          <MaterialCommunityIcons name="cash-check" size={22} color={colors.textMuted} />
+        </View>
         <View style={styles.debtModeRow}>
           <CategoryChip active={settleMode === "owes_me"} icon="cash-plus" label="They paid me" onPress={() => onSettleModeChange("owes_me")} />
           <CategoryChip active={settleMode === "i_owe"} icon="cash-minus" label="I paid them" onPress={() => onSettleModeChange("i_owe")} />
@@ -657,24 +653,43 @@ function PersonDetail({
         />
         <View style={styles.settleActions}>
           <AppButton disabled={settling || settleAvailable <= 0} loading={settling} onPress={onSettleBalance} style={styles.settleActionButton}>
-            Update
+            Save payment
           </AppButton>
           <AppButton disabled={settling || settleAvailable <= 0} onPress={onSettleAll} style={styles.settleActionButton} variant="secondary">
             Settle all
           </AppButton>
         </View>
-      </View>
+      </AppCard>
 
-      <SectionHeader title="History" />
-      {historyLoading ? (
-        <SkeletonList rows={3} />
-      ) : history.length ? (
-        history.map((expense) => <HistoryRow expense={expense} key={expense.id} person={person} />)
-      ) : (
-        <AppText color="textMuted" variant="body">
-          No history with this person yet.
-        </AppText>
-      )}
+      <AppCard style={styles.historyPanel}>
+        <View style={styles.actionCardHeader}>
+          <AppText variant="bodyStrong">History</AppText>
+          <AppText color="textSubtle" variant="caption">{history.length} entries</AppText>
+        </View>
+        {historyLoading ? (
+          <PersonHistorySkeleton />
+        ) : history.length ? (
+          history.map((expense) => <HistoryRow expense={expense} key={expense.id} person={person} />)
+        ) : (
+          <View style={styles.historyEmpty}>
+            <MaterialCommunityIcons name="history" size={24} color={colors.textMuted} />
+            <AppText color="textMuted" variant="body">No history with this person yet.</AppText>
+          </View>
+        )}
+      </AppCard>
+    </View>
+  );
+}
+
+function PersonHistorySkeleton() {
+  return (
+    <View>
+      {[0, 1, 2].map((item) => (
+        <View key={item} style={styles.historySkeletonRow}>
+          <SkeletonBlock height={14} width="64%" />
+          <SkeletonBlock height={12} style={styles.historySkeletonLine} width="42%" />
+        </View>
+      ))}
     </View>
   );
 }
@@ -730,6 +745,16 @@ function EmptyPeople({ onAdd }: { onAdd: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  actionCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1.5],
+  },
+  addPreview: {
+    alignItems: "center",
+    marginBottom: dsSpace[2],
+  },
   avatar: {
     alignItems: "center",
     justifyContent: "center",
@@ -762,8 +787,8 @@ const styles = StyleSheet.create({
     paddingBottom: dsSpace[1.5],
     paddingRight: dsSpace[2],
   },
-  debtBox: {
-    marginBottom: dsSpace[1],
+  detailActionCard: {
+    marginBottom: dsSpace[1.5],
   },
   debtModeRow: {
     flexDirection: "row",
@@ -817,6 +842,20 @@ const styles = StyleSheet.create({
     gap: dsSpace[1],
     marginBottom: dsSpace[2],
   },
+  historyEmpty: {
+    alignItems: "center",
+    gap: dsSpace[1],
+    paddingVertical: dsSpace[2],
+  },
+  historyPanel: {
+    paddingVertical: dsSpace[1.5],
+  },
+  historySkeletonLine: {
+    marginTop: dsSpace[1],
+  },
+  historySkeletonRow: {
+    paddingVertical: dsSpace[1.5],
+  },
   ledgerRow: {
     flexDirection: "row",
     gap: dsSpace[1],
@@ -837,16 +876,6 @@ const styles = StyleSheet.create({
     paddingVertical: dsSpace[1.5],
   },
   personText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  previewRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: dsSpace[1.5],
-    marginBottom: dsSpace[2],
-  },
-  previewText: {
     flex: 1,
     minWidth: 0,
   },

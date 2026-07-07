@@ -6,6 +6,7 @@ import { AppButton, AppCard, AppScreen, AppSegmentedControl, AppText, ErrorState
 import { dsRadius, dsSpace, dsTouch } from "../design-system/tokens";
 import { TurnstileBox } from "../components/TurnstileBox";
 import { useAuth } from "../context/AuthContext";
+import { getApiErrorMessage } from "../services/apiClient";
 
 type AuthMode = "login" | "signup";
 
@@ -88,8 +89,8 @@ export function AuthScreen() {
       } else {
         await login(email.trim(), password, turnstileToken);
       }
-    } catch {
-      setError(isSignup ? "Could not create account." : "Invalid email or password.");
+    } catch (submitError) {
+      setError(getApiErrorMessage(submitError, isSignup ? "Could not create account." : "Invalid email or password."));
       setTurnstileToken("");
       setTurnstileResetKey((current) => current + 1);
     } finally {
@@ -229,12 +230,10 @@ function PasswordField({
 function AuthLoadingOverlay({ label, visible }: { label: string; visible: boolean }) {
   const { colors } = useDs();
   const spin = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) return;
     spin.setValue(0);
-    pulse.setValue(0);
     const spinAnimation = Animated.loop(
       Animated.timing(spin, {
         duration: 900,
@@ -243,39 +242,16 @@ function AuthLoadingOverlay({ label, visible }: { label: string; visible: boolea
         useNativeDriver: true,
       })
     );
-    const pulseAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          duration: 650,
-          easing: Easing.out(Easing.quad),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          duration: 650,
-          easing: Easing.in(Easing.quad),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    );
     spinAnimation.start();
-    pulseAnimation.start();
     return () => {
       spinAnimation.stop();
-      pulseAnimation.stop();
     };
-  }, [pulse, spin, visible]);
+  }, [spin, visible]);
 
   const rotate = spin.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
   });
-  const scale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.92, 1.04],
-  });
-
   return (
     <Modal animationType="fade" transparent visible={visible}>
       <View style={styles.loadingOverlay}>
@@ -286,7 +262,7 @@ function AuthLoadingOverlay({ label, visible }: { label: string; visible: boolea
               {
                 borderColor: colors.border,
                 borderTopColor: colors.accent,
-                transform: [{ rotate }, { scale }],
+                transform: [{ rotate }],
               },
             ]}
           />

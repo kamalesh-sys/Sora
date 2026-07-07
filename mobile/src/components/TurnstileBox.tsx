@@ -125,11 +125,7 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
       }
 
       onToken("");
-      onError(
-        payload.error
-          ? `Human verification failed: ${payload.error}`
-          : "Human verification failed to load. Try again."
-      );
+      onError("Human verification failed to load. Try again.");
     } catch {
       onToken("");
       onError("Human verification failed. Try again.");
@@ -148,13 +144,13 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
         setSupportMultipleWindows={false}
         mixedContentMode="compatibility"
         onMessage={handleMessage}
-        onError={(event) => {
+        onError={() => {
           onToken("");
-          onError(`Human verification WebView error: ${event.nativeEvent.description}`);
+          onError("Human verification could not load. Check your connection and try again.");
         }}
-        onHttpError={(event) => {
+        onHttpError={() => {
           onToken("");
-          onError(`Human verification HTTP error: ${event.nativeEvent.statusCode}`);
+          onError("Human verification could not load. Check your connection and try again.");
         }}
         originWhitelist={["*"]}
         scrollEnabled={false}

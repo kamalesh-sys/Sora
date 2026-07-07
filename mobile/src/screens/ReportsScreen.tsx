@@ -22,9 +22,10 @@ import {
   useDs,
 } from "../design-system";
 import { useAuth } from "../context/AuthContext";
-import { getMonthlySummary } from "../services/expenseApi";
+import { getCategories, getMonthlySummary } from "../services/expenseApi";
 import { exportMonthlyReport } from "../services/reportExport";
-import type { MonthlySummary } from "../types/api";
+import { getCategoryVisual } from "../theme/soraTheme";
+import type { ExpenseCategory, MonthlySummary } from "../types/api";
 import { getCurrentMonth, isValidMonth } from "../utils/date";
 import { formatCurrencyCompact, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
@@ -46,6 +47,7 @@ export function ReportsScreen() {
   const { colors } = useDs();
   const { token } = useAuth();
   const [month, setMonth] = useState(getCurrentMonth());
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [previousSummary, setPreviousSummary] = useState<MonthlySummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,9 +64,14 @@ export function ReportsScreen() {
 
     setError("");
     try {
-      const [current, previous] = await Promise.all([getMonthlySummary(month), getMonthlySummary(shiftMonth(month, -1))]);
+      const [current, previous, categoryRows] = await Promise.all([
+        getMonthlySummary(month),
+        getMonthlySummary(shiftMonth(month, -1)),
+        getCategories(),
+      ]);
       setSummary(current);
       setPreviousSummary(previous);
+      setCategories(categoryRows);
     } catch {
       setError("Could not load report. Pull to retry.");
     } finally {
@@ -83,9 +90,22 @@ export function ReportsScreen() {
   const budget = parseAmount(summary?.total_budget);
   const balance = parseAmount(summary?.balance);
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((total / budget) * 100)) : 0;
+  const categoryById = useMemo(() => new Map(categories.map((item) => [item.id, item])), [categories]);
+  const categoryByName = useMemo(() => new Map(categories.map((item) => [item.name.toLowerCase(), item])), [categories]);
+  const getBreakdownVisual = useCallback(
+    (categoryId: number | null, categoryName: string) => {
+      const category = (categoryId ? categoryById.get(categoryId) : undefined) ?? categoryByName.get(categoryName.toLowerCase());
+      return getCategoryVisual(categoryName, category?.icon, category?.color);
+    },
+    [categoryById, categoryByName]
+  );
   const chartRows = useMemo(
-    () => (summary?.category_breakdown ?? []).map((row) => ({ count: row.count, label: row.category_name, value: row.total })),
-    [summary?.category_breakdown]
+    () =>
+      (summary?.category_breakdown ?? []).map((row) => {
+        const visual = getBreakdownVisual(row.category_id, row.category_name);
+        return { color: visual.color, count: row.count, label: row.category_name, value: row.total };
+      }),
+    [getBreakdownVisual, summary?.category_breakdown]
   );
 
   const exportReport = async (type: "csv" | "pdf") => {
@@ -175,15 +195,19 @@ export function ReportsScreen() {
           <SectionHeader title="Categories" />
           {(summary?.category_breakdown ?? []).length ? (
             <AppCard style={styles.listCard}>
-              {summary?.category_breakdown.map((row) => (
-                <ListRow
-                  amount={formatCurrencyCompact(row.total)}
-                  description={`${row.count} expenses`}
-                  icon="chart-donut"
-                  key={`${row.category_id}-${row.category_name}`}
-                  title={row.category_name}
-                />
-              ))}
+              {summary?.category_breakdown.map((row) => {
+                const visual = getBreakdownVisual(row.category_id, row.category_name);
+                return (
+                  <ListRow
+                    amount={formatCurrencyCompact(row.total)}
+                    description={`${row.count} expenses`}
+                    icon={visual.icon}
+                    iconColor={visual.color}
+                    key={`${row.category_id}-${row.category_name}`}
+                    title={row.category_name}
+                  />
+                );
+              })}
             </AppCard>
           ) : (
             <EmptyState body="Hmm, waiting for category spending." icon="shape-outline" title="No categories yet" />
