@@ -2,14 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  LayoutAnimation,
-  PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
-  UIManager,
   View,
 } from "react-native";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
@@ -17,6 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import DragList, { type DragListRenderItemInfo } from "react-native-draglist";
 
 import {
   AmountInput,
@@ -57,7 +54,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "ExpenseForm">;
 
 const RECENT_PAYMENT_KEY = "sora_expense_recent_payment_mode";
 const RECENT_CATEGORY_KEY = "sora_expense_recent_category_id";
-const CATEGORY_DRAG_STEP = 112;
+const CATEGORY_DRAG_DELAY_MS = 220;
 
 const paymentModes: Array<{ label: string; value: PaymentMethod }> = [
   { label: "UPI", value: "upi" },
@@ -76,10 +73,6 @@ function fromDateInputValue(value: string) {
     return new Date();
   }
   return new Date(`${value}T00:00:00`);
-}
-
-if (Platform.OS === "android") {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
 function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod) {
@@ -132,17 +125,12 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   const cleanAmount = Number(amount);
   const amountError = amountTouched && (!Number.isFinite(cleanAmount) || cleanAmount <= 0) ? "Enter an amount greater than 0." : "";
 
-  const reorderCategories = useCallback((categoryId: number, targetIndex: number) => {
+  const reorderCategories = useCallback((fromIndex: number, toIndex: number) => {
     setCategories((current) => {
-      const fromIndex = current.findIndex((item) => item.id === categoryId);
-      if (fromIndex < 0 || fromIndex === targetIndex) return current;
+      if (fromIndex < 0 || fromIndex >= current.length || fromIndex === toIndex) return current;
       const next = [...current];
       const [moved] = next.splice(fromIndex, 1);
-      next.splice(clamp(targetIndex, 0, next.length), 0, moved);
-      LayoutAnimation.configureNext({
-        duration: 180,
-        update: { type: LayoutAnimation.Types.easeInEaseOut },
-      });
+      next.splice(clamp(toIndex, 0, next.length), 0, moved);
       void saveCategoryOrder(next);
       return next;
     });
@@ -385,142 +373,148 @@ function ReorderableCategoryRail({
 }: {
   categories: ExpenseCategory[];
   onManage: () => void;
-  onReorder: (categoryId: number, targetIndex: number) => void;
+  onReorder: (fromIndex: number, toIndex: number) => void;
   onSelect: (categoryId: number) => void;
   selectedId: number | null;
 }) {
-  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
 
-  const startDrag = (categoryId: number) => {
-    void Haptics.selectionAsync();
-    setDraggingId(categoryId);
-  };
+  const beginDrag = useCallback(() => {
+    if (!draggingRef.current) {
+      void Haptics.selectionAsync();
+    }
+    draggingRef.current = true;
+    setDragging(true);
+  }, []);
 
-  const endDrag = () => {
-    setDraggingId(null);
-  };
+  const endDrag = useCallback(() => {
+    if (draggingRef.current) {
+      void Haptics.selectionAsync();
+    }
+    draggingRef.current = false;
+    setDragging(false);
+  }, []);
+
+  const renderItem = useCallback(
+    (info: DragListRenderItemInfo<ExpenseCategory>) => {
+      const visual = getCategoryVisual(info.item.name, info.item.icon, info.item.color);
+      return (
+        <SortableCategoryChip
+          category={info.item}
+          icon={visual.icon}
+          isActive={info.isActive}
+          onDragEnd={() => {
+            info.onDragEnd();
+            endDrag();
+          }}
+          onDragStart={() => {
+            beginDrag();
+            info.onDragStart();
+          }}
+          onSelect={() => {
+            if (!dragging) onSelect(info.item.id);
+          }}
+          selected={selectedId === info.item.id}
+        />
+      );
+    },
+    [beginDrag, dragging, endDrag, onSelect, selectedId]
+  );
 
   return (
-    <ScrollView
-      horizontal
-      scrollEnabled={!draggingId}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.rail}
-    >
-      {categories.map((item, index) => {
-        const visual = getCategoryVisual(item.name, item.icon, item.color);
-        return (
-          <DraggableCategoryChip
-            category={item}
-            dragging={draggingId === item.id}
-            icon={visual.icon}
-            index={index}
-            key={item.id}
-            onActivate={() => startDrag(item.id)}
-            onDragEnd={endDrag}
-            onMoveIndex={(targetIndex) => onReorder(item.id, targetIndex)}
-            onSelect={() => {
-              if (!draggingId) onSelect(item.id);
-            }}
-            selected={selectedId === item.id}
-            total={categories.length}
-          />
-        );
-      })}
-      <CategoryChip icon="plus" label="New" onPress={onManage} style={styles.categoryChip} />
-    </ScrollView>
+    <View style={styles.railWrap}>
+      <DragList
+        bounces={false}
+        containerStyle={styles.dragListContainer}
+        contentContainerStyle={styles.rail}
+        data={categories}
+        horizontal
+        keyExtractor={(item) => String(item.id)}
+        keyboardShouldPersistTaps="handled"
+        ListFooterComponent={<AddCategoryRailButton disabled={dragging} onPress={onManage} />}
+        nestedScrollEnabled
+        onDragBegin={beginDrag}
+        onDragEnd={endDrag}
+        onReordered={onReorder}
+        renderItem={renderItem}
+        scrollEnabled={!dragging || categories.length > 3}
+        showsHorizontalScrollIndicator={false}
+      />
+    </View>
   );
 }
 
-function DraggableCategoryChip({
+function AddCategoryRailButton({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
+  const { colors } = useDs();
+  return (
+    <Pressable
+      accessibilityLabel="Add category"
+      accessibilityRole="button"
+      android_ripple={{ color: colors.press, borderless: true }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={[
+        styles.addCategoryButton,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: disabled ? 0.56 : 1,
+        },
+      ]}
+    >
+      <MaterialCommunityIcons name="plus" size={22} color={colors.accent} />
+    </Pressable>
+  );
+}
+
+function SortableCategoryChip({
   category,
-  dragging,
   icon,
-  index,
-  onActivate,
+  isActive,
   onDragEnd,
-  onMoveIndex,
+  onDragStart,
   onSelect,
   selected,
-  total,
 }: {
   category: ExpenseCategory;
-  dragging: boolean;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  index: number;
-  onActivate: () => void;
+  isActive: boolean;
   onDragEnd: () => void;
-  onMoveIndex: (targetIndex: number) => void;
+  onDragStart: () => void;
   onSelect: () => void;
   selected: boolean;
-  total: number;
 }) {
-  const pan = useRef(new Animated.Value(0)).current;
-  const startIndex = useRef(index);
-  const lastTargetIndex = useRef(index);
-  const wasDragging = useRef(false);
+  const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (dragging && !wasDragging.current) {
-      startIndex.current = index;
-      lastTargetIndex.current = index;
-      wasDragging.current = true;
-    }
-    if (!dragging && wasDragging.current) {
-      wasDragging.current = false;
-      Animated.spring(pan, {
-        friction: 8,
-        tension: 160,
-        toValue: 0,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [dragging, index, pan]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => dragging && Math.abs(gesture.dx) > 4,
-        onPanResponderMove: (_, gesture) => {
-          if (!dragging) return;
-          pan.setValue(gesture.dx);
-          const targetIndex = clamp(startIndex.current + Math.round(gesture.dx / CATEGORY_DRAG_STEP), 0, total - 1);
-          if (targetIndex !== lastTargetIndex.current) {
-            lastTargetIndex.current = targetIndex;
-            onMoveIndex(targetIndex);
-          }
-        },
-        onPanResponderRelease: () => {
-          onDragEnd();
-        },
-        onPanResponderTerminate: () => {
-          onDragEnd();
-        },
-        onShouldBlockNativeResponder: () => true,
-      }),
-    [dragging, onDragEnd, onMoveIndex, pan, total]
-  );
+    Animated.spring(scale, {
+      friction: 7,
+      tension: 180,
+      toValue: isActive ? 1.06 : 1,
+      useNativeDriver: true,
+    }).start();
+  }, [isActive, scale]);
 
   return (
     <Animated.View
-      {...panResponder.panHandlers}
       style={[
         styles.draggableChip,
-        dragging ? styles.draggingChip : null,
+        isActive ? styles.draggingChip : null,
         {
-          transform: [
-            { translateX: dragging ? pan : 0 },
-            { scale: dragging ? 1.04 : 1 },
-          ],
+          transform: [{ scale }],
         },
       ]}
     >
       <CategoryChip
-        active={selected}
+        active={selected || isActive}
+        delayLongPress={CATEGORY_DRAG_DELAY_MS}
         icon={icon}
         label={category.name}
-        onLongPress={onActivate}
-        onPress={dragging ? undefined : onSelect}
+        onLongPress={onDragStart}
+        onPress={isActive ? undefined : onSelect}
+        onPressOut={onDragEnd}
         style={styles.categoryChip}
       />
     </Animated.View>
@@ -553,16 +547,29 @@ const styles = StyleSheet.create({
     marginBottom: dsSpace[2],
     minHeight: 48,
   },
+  dragListContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
   draggableChip: {
     zIndex: 1,
   },
   draggingChip: {
-    elevation: 6,
+    elevation: 7,
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
     zIndex: 20,
+  },
+  addCategoryButton: {
+    alignItems: "center",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 44,
+    justifyContent: "center",
+    marginLeft: dsSpace[1],
+    width: 44,
   },
   categoryChip: {
     justifyContent: "center",
@@ -608,8 +615,13 @@ const styles = StyleSheet.create({
   rail: {
     alignItems: "center",
     gap: dsSpace[1],
-    paddingBottom: dsSpace[1],
-    paddingRight: dsSpace[3],
+    paddingRight: dsSpace[1],
+  },
+  railWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[1],
   },
   screenContent: {
     paddingBottom: 112,

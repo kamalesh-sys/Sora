@@ -258,17 +258,23 @@ export const AmountInput = forwardRef<TextInput, TextInputProps & { error?: stri
 
 export function CategoryChip({
   active,
+  delayLongPress,
+  disabled,
   icon,
   label,
   onLongPress,
   onPress,
+  onPressOut,
   style,
 }: {
   active?: boolean;
+  delayLongPress?: number;
+  disabled?: boolean;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   onLongPress?: () => void;
   onPress?: () => void;
+  onPressOut?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useDs();
@@ -277,13 +283,17 @@ export function CategoryChip({
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       android_ripple={{ color: colors.press }}
+      delayLongPress={delayLongPress}
+      disabled={disabled}
       onLongPress={onLongPress}
       onPress={onPress}
+      onPressOut={onPressOut}
       style={[
         styles.chip,
         {
           backgroundColor: active ? colors.accent : colors.surface,
           borderColor: active ? colors.accent : colors.border,
+          opacity: disabled ? 0.56 : 1,
         },
         style,
       ]}

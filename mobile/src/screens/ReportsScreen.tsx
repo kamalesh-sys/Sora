@@ -21,6 +21,7 @@ import {
   dsSpace,
   useDs,
 } from "../design-system";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import { getCategories, getMonthlySummary } from "../services/expenseApi";
 import { exportMonthlyReport } from "../services/reportExport";
@@ -45,6 +46,7 @@ function getComparison(current: MonthlySummary | null | undefined, previous: Mon
 
 export function ReportsScreen() {
   const { colors } = useDs();
+  const { themeMode } = useAppSettings();
   const { token } = useAuth();
   const [month, setMonth] = useState(getCurrentMonth());
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -90,6 +92,10 @@ export function ReportsScreen() {
   const budget = parseAmount(summary?.total_budget);
   const balance = parseAmount(summary?.balance);
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((total / budget) * 100)) : 0;
+  const primaryCardBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
+  const primaryCardText = "#FFFFFF";
+  const primaryCardMuted = "rgba(255,255,255,0.72)";
+  const primaryIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
   const categoryById = useMemo(() => new Map(categories.map((item) => [item.id, item])), [categories]);
   const categoryByName = useMemo(() => new Map(categories.map((item) => [item.name.toLowerCase(), item])), [categories]);
   const getBreakdownVisual = useCallback(
@@ -159,17 +165,17 @@ export function ReportsScreen() {
         <ReportsSkeleton />
       ) : (
         <>
-          <AppCard elevated style={[styles.primaryCard, { backgroundColor: colors.bgInverse, borderColor: colors.bgInverse }]}>
+          <AppCard elevated style={[styles.primaryCard, { backgroundColor: primaryCardBackground, borderColor: primaryCardBackground }]}>
             <View style={styles.primaryTop}>
               <View>
-                <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="caption">Total spent</AppText>
-                <AppText style={{ color: colors.textInverse }} variant="display">{formatCurrencyCompact(total)}</AppText>
+                <AppText style={{ color: primaryCardMuted }} variant="caption">Total spent</AppText>
+                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(total)}</AppText>
               </View>
-              <View style={[styles.primaryIcon, { backgroundColor: colors.accent }]}>
+              <View style={[styles.primaryIcon, { backgroundColor: primaryIconBackground }]}>
                 <MaterialCommunityIcons name="chart-line" size={24} color="#FFFFFF" />
               </View>
             </View>
-            <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="body">{getComparison(summary, previousSummary, month)}</AppText>
+            <AppText style={{ color: primaryCardMuted }} variant="body">{getComparison(summary, previousSummary, month)}</AppText>
           </AppCard>
 
           <AppCard>

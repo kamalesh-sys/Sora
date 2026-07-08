@@ -23,6 +23,7 @@ import {
   dsSpace,
   useDs,
 } from "../design-system";
+import { useAppSettings } from "../context/AppSettingsContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
   createBudget,
@@ -96,6 +97,7 @@ function sanitizeAmount(value: string) {
 
 export function BillsScreen({}: Props) {
   const { colors } = useDs();
+  const { themeMode } = useAppSettings();
   const [tab, setTab] = useState<Tab>("upcoming");
   const [month, setMonth] = useState(getCurrentMonth());
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -189,6 +191,10 @@ export function BillsScreen({}: Props) {
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
   const rows = tab === "history" ? historyOccurrences : tab === "recurring" ? activeBills : openOccurrences;
   const initialLoading = loading && !occurrences.length && !bills.length && !monthlySummary;
+  const heroBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
+  const heroTextColor = "#FFFFFF";
+  const heroMutedColor = "rgba(255,255,255,0.72)";
+  const heroIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
 
   const resetBillForm = useCallback(() => {
     setEditingBill(null);
@@ -378,21 +384,21 @@ export function BillsScreen({}: Props) {
         <BillsSkeleton />
       ) : (
         <>
-          <AppCard elevated style={[styles.heroCard, { backgroundColor: colors.bgInverse, borderColor: colors.bgInverse }]}>
+          <AppCard elevated style={[styles.heroCard, { backgroundColor: heroBackground, borderColor: heroBackground }]}>
             <View style={styles.heroTop}>
               <View>
-                <AppText style={{ color: colors.textInverse }} variant="caption">
+                <AppText style={{ color: heroMutedColor }} variant="caption">
                   Upcoming load
                 </AppText>
-                <AppText style={{ color: colors.textInverse }} variant="display">
+                <AppText style={{ color: heroTextColor }} variant="display">
                   {formatCurrencyCompact(upcomingTotal)}
                 </AppText>
               </View>
-              <View style={[styles.heroIcon, { backgroundColor: colors.accent }]}>
+              <View style={[styles.heroIcon, { backgroundColor: heroIconBackground }]}>
                 <MaterialCommunityIcons name="calendar-clock" size={24} color="#FFFFFF" />
               </View>
             </View>
-            <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="body">
+            <AppText style={{ color: heroMutedColor }} variant="body">
               {activeBills.length} active recurring bills for {formatMonthLabel(month)}
             </AppText>
           </AppCard>

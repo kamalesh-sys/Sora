@@ -20,6 +20,7 @@ import {
   dsSpace,
   useDs,
 } from "../design-system";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { getDashboardSummary, getExpenses } from "../services/expenseApi";
@@ -75,6 +76,7 @@ function buildDailySpendCandles(expenses: Expense[], month: string, maxBars = 12
 
 export function DashboardScreen({ navigation }: Props) {
   const { colors } = useDs();
+  const { themeMode } = useAppSettings();
   const { user } = useAuth();
   const [month] = useState(getCurrentMonth());
   const [data, setData] = useState<DashboardSummary | null>(null);
@@ -96,6 +98,10 @@ export function DashboardScreen({ navigation }: Props) {
   const dailyCandles = useMemo(() => buildDailySpendCandles(monthExpenses, month), [month, monthExpenses]);
   const hasDailyCandles = dailyCandles.some((value) => value > 0);
   const compactCandles = hasDailyCandles ? dailyCandles : [4, 8, 5, 11, 7, 13, 6, 9, 5, 12, 8, 10];
+  const primaryCardBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
+  const primaryCardText = "#FFFFFF";
+  const primaryCardMuted = "rgba(255,255,255,0.72)";
+  const primaryIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
 
   const load = useCallback(async () => {
     setError("");
@@ -143,17 +149,17 @@ export function DashboardScreen({ navigation }: Props) {
         <DashboardSkeleton />
       ) : (
         <>
-          <AppCard elevated style={[styles.primaryCard, { backgroundColor: colors.bgInverse, borderColor: colors.bgInverse }]}>
+          <AppCard elevated style={[styles.primaryCard, { backgroundColor: primaryCardBackground, borderColor: primaryCardBackground }]}>
             <View style={styles.primaryTop}>
               <View>
-                <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="caption">Today</AppText>
-                <AppText style={{ color: colors.textInverse }} variant="display">{formatCurrencyCompact(todaySpend)}</AppText>
+                <AppText style={{ color: primaryCardMuted }} variant="caption">Today</AppText>
+                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(todaySpend)}</AppText>
               </View>
-              <View style={[styles.primaryIcon, { backgroundColor: colors.accent }]}>
+              <View style={[styles.primaryIcon, { backgroundColor: primaryIconBackground }]}>
                 <MaterialCommunityIcons name="wallet-outline" size={24} color="#FFFFFF" />
               </View>
             </View>
-            <AppText style={{ color: colors.textInverse, opacity: 0.72 }} variant="body">
+            <AppText style={{ color: primaryCardMuted }} variant="body">
               {formatMonthLabel(month)} spend: {formatCurrencyCompact(monthSpend)}
             </AppText>
           </AppCard>
