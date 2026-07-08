@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .auth_views import login, logout, me, register, turnstile_challenge
+from .auth_views import login, logout, me, register
 from .views import (
     BillOccurrenceViewSet,
     CategoryBudgetViewSet,
@@ -31,7 +31,6 @@ router.register("settlements", SettlementViewSet, basename="settlement")
 urlpatterns = [
     path("auth/register/", register, name="auth-register"),
     path("auth/login/", login, name="auth-login"),
-    path("auth/turnstile/", turnstile_challenge, name="auth-turnstile"),
     path("auth/me/", me, name="auth-me"),
     path("auth/logout/", logout, name="auth-logout"),
     path("", include(router.urls)),
