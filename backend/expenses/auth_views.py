@@ -1,7 +1,10 @@
 import logging
+from html import escape
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -54,6 +57,132 @@ def _verify_turnstile(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     return None
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def turnstile_challenge(request):
+    theme = "dark" if request.query_params.get("theme") == "dark" else "light"
+    redirect_uri = request.query_params.get("redirect", "")
+    site_key = getattr(settings, "TURNSTILE_SITE_KEY", "")
+    if not site_key:
+        logger.error("TURNSTILE_SITE_KEY is not configured.")
+
+    html = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html,
+      body {{
+        background: transparent;
+        color-scheme: {theme};
+        margin: 0;
+        min-height: 118px;
+        overflow: hidden;
+      }}
+
+      body {{
+        align-items: center;
+        display: flex;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        justify-content: center;
+      }}
+
+      #turnstile-container {{
+        min-height: 72px;
+        min-width: 300px;
+      }}
+
+      .message {{
+        color: #5b616e;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 16px;
+        text-align: center;
+      }}
+    </style>
+  </head>
+  <body>
+    <div id="turnstile-container" aria-label="Human verification"></div>
+    <script>
+      const siteKey = "{escape(site_key)}";
+      const redirectUri = "{escape(redirect_uri)}";
+
+      function send(payload) {{
+        const serialized = JSON.stringify(payload);
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {{
+          window.ReactNativeWebView.postMessage(serialized);
+          return;
+        }}
+
+        if (redirectUri && payload.type === "success" && payload.token) {{
+          const separator = redirectUri.includes("?") ? "&" : "?";
+          window.location.href = redirectUri + separator + "token=" + encodeURIComponent(payload.token);
+          return;
+        }}
+
+        if (redirectUri && payload.type === "error") {{
+          const separator = redirectUri.includes("?") ? "&" : "?";
+          window.location.href = redirectUri + separator + "error=" + encodeURIComponent(payload.error || "verification_failed");
+        }}
+      }}
+
+      function showMessage(text) {{
+        const container = document.getElementById("turnstile-container");
+        container.className = "message";
+        container.textContent = text;
+      }}
+
+      window.onloadTurnstile = function() {{
+        if (!siteKey) {{
+          send({{ type: "error", error: "missing_site_key" }});
+          showMessage("Human verification is not configured.");
+          return;
+        }}
+
+        try {{
+          turnstile.render("#turnstile-container", {{
+            sitekey: siteKey,
+            theme: "{theme}",
+            callback: function(token) {{
+              send({{ type: "success", token: token }});
+            }},
+            "expired-callback": function() {{
+              send({{ type: "expired" }});
+            }},
+            "error-callback": function(error) {{
+              send({{ type: "error", error: String(error || "unknown") }});
+            }}
+          }});
+          send({{ type: "loaded" }});
+        }} catch (error) {{
+          send({{ type: "error", error: String(error && error.message ? error.message : error) }});
+          showMessage("Human verification could not start.");
+        }}
+      }};
+
+      window.addEventListener("error", function(event) {{
+        send({{ type: "error", error: String(event.message || "script_error") }});
+      }});
+    </script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstile&render=explicit" async defer></script>
+  </body>
+</html>"""
+
+    response = HttpResponse(html)
+    response["Content-Type"] = "text/html; charset=utf-8"
+    response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    response["Content-Security-Policy"] = (
+        "default-src 'none'; "
+        "script-src 'unsafe-inline' https://challenges.cloudflare.com; "
+        "frame-src https://challenges.cloudflare.com; "
+        "connect-src https://challenges.cloudflare.com; "
+        "style-src 'unsafe-inline';"
+    )
+    return response
 
 
 @api_view(["POST"])
