@@ -31,7 +31,6 @@ import { useFeedback } from "../context/FeedbackContext";
 import { GoalFormSheet } from "../features/goals/GoalFormSheet";
 import {
   fromDateInputValue,
-  getGoalHealthExplanation,
   getGoalHealthMeta,
   getGoalIcon,
   getGoalProgress,
@@ -221,6 +220,7 @@ export function GoalDetailScreen({ navigation, route }: Props) {
   const progress = getGoalProgress(goal);
   const goalColor = safeGoalColor(goal.color, colors.accent);
   const heroBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
+  const heroIconBackground = themeMode === "dark" ? "#0A0B0D" : "rgba(255,255,255,0.16)";
   const contributions = goal.contributions ?? [];
   const skippedMonths = goal.skipped_months ?? [];
   const active = goal.status === "active";
@@ -242,7 +242,7 @@ export function GoalDetailScreen({ navigation, route }: Props) {
           style={[styles.heroCard, { backgroundColor: heroBackground, borderColor: heroBackground }]}
         >
           <View style={styles.heroTop}>
-            <View style={[styles.heroIcon, { backgroundColor: "rgba(255,255,255,0.16)" }]}>
+            <View style={[styles.heroIcon, { backgroundColor: heroIconBackground }]}>
               <MaterialCommunityIcons
                 color="#FFFFFF"
                 name={getGoalIcon(goal.icon, goal.template_key)}
@@ -254,11 +254,6 @@ export function GoalDetailScreen({ navigation, route }: Props) {
           <AppText style={styles.heroTitle} variant="title">
             {goal.name}
           </AppText>
-          {goal.description ? (
-            <AppText numberOfLines={3} style={styles.heroDescription} variant="body">
-              {goal.description}
-            </AppText>
-          ) : null}
           <View style={styles.heroAmountRow}>
             <AppText numberOfLines={1} style={styles.heroAmount} variant="title">
               {formatCurrencyCompact(goal.saved_amount)}
@@ -302,7 +297,9 @@ export function GoalDetailScreen({ navigation, route }: Props) {
           />
         </View>
 
-        <HealthCard goal={goal} onAdd={openContribution} onEdit={openEditor} />
+        {goal.health_status === "at_risk" || goal.health_status === "overdue" ? (
+          <HealthCard goal={goal} onAdd={openContribution} onEdit={openEditor} />
+        ) : null}
 
         <SectionHeader title="Contribution history" />
         {contributions.length ? (
@@ -335,7 +332,6 @@ export function GoalDetailScreen({ navigation, route }: Props) {
         ) : (
           <EmptyState
             action={active ? "Add first contribution" : undefined}
-            body="Each amount you add will appear here with its date and note."
             icon="history"
             onAction={active ? openContribution : undefined}
             title="No contributions yet"
@@ -359,9 +355,6 @@ export function GoalDetailScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.historyCopy}>
                     <AppText variant="bodyStrong">Skipped {formatMonthLabel(skip.month.slice(0, 7))}</AppText>
-                    <AppText color="textSubtle" variant="caption">
-                      Monthly plan recalculated
-                    </AppText>
                   </View>
                   {active ? (
                     <AppButton
@@ -399,12 +392,13 @@ export function GoalDetailScreen({ navigation, route }: Props) {
           error={sheetError}
           goal={goal}
           onClose={() => setContributing(false)}
-          onSave={async (amount, contributionDate, note) => {
+          onSave={async (amount, contributionDate, note, addToExpenses) => {
             setSaving(true);
             setSheetError("");
             try {
               const result = await addGoalContribution(goal.id, {
                 amount,
+                add_to_expenses: addToExpenses,
                 contribution_date: contributionDate,
                 note,
               });
@@ -542,8 +536,8 @@ function CompletionCard({ completedAt, goalColor }: { completedAt: string | null
       </View>
       <View style={styles.completionCopy}>
         <AppText variant="headline">Goal complete</AppText>
-        <AppText color="textMuted" variant="body">
-          {completedAt ? `Reached on ${formatDateLabel(completedAt.slice(0, 10))}.` : "You reached your target."} Your history stays here.
+        <AppText color="textMuted" variant="caption">
+          {completedAt ? formatDateLabel(completedAt.slice(0, 10)) : "Completed"}
         </AppText>
       </View>
     </AppCard>
@@ -597,16 +591,9 @@ function HealthCard({ goal, onAdd, onEdit }: { goal: Goal; onAdd: () => void; on
       <View style={styles.healthTitleRow}>
         <MaterialCommunityIcons color={foreground} name={health.icon} size={22} />
         <AppText style={{ color: foreground }} variant="bodyStrong">
-          {goal.health_status === "at_risk"
-            ? "A small catch-up keeps it moving"
-            : goal.health_status === "overdue"
-              ? "Choose the next useful step"
-              : health.label}
+          {health.label}
         </AppText>
       </View>
-      <AppText color="textMuted" style={styles.healthBody} variant="body">
-        {getGoalHealthExplanation(goal)}
-      </AppText>
       {goal.health_status === "at_risk" ? (
         <View style={styles.healthActionRow}>
           <AppButton compact onPress={onAdd} variant="secondary">
@@ -635,7 +622,7 @@ function ContributionSheet({
   error: string;
   goal: Goal;
   onClose: () => void;
-  onSave: (amount: string, date: string, note: string) => void;
+  onSave: (amount: string, date: string, note: string, addToExpenses: boolean) => void;
   saving: boolean;
   visible: boolean;
 }) {
@@ -648,6 +635,7 @@ function ContributionSheet({
   const [amount, setAmount] = useState(defaultAmount > 0 ? defaultAmount.toFixed(2) : "");
   const [contributionDate, setContributionDate] = useState(getTodayDate());
   const [note, setNote] = useState("");
+  const [addToExpenses, setAddToExpenses] = useState(false);
   const [amountTouched, setAmountTouched] = useState(false);
   const [dateError, setDateError] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -662,6 +650,7 @@ function ContributionSheet({
       setAmount(suggested > 0 ? suggested.toFixed(2) : "");
       setContributionDate(getTodayDate());
       setNote("");
+      setAddToExpenses(false);
       setAmountTouched(false);
       setDateError("");
       setShowDatePicker(false);
@@ -684,7 +673,7 @@ function ContributionSheet({
       setDateError("Choose today or an earlier date.");
       return;
     }
-    onSave(numericAmount.toFixed(2), contributionDate, note.trim());
+    onSave(numericAmount.toFixed(2), contributionDate, note.trim(), addToExpenses);
   };
 
   const onDateChange = (event: DateTimePickerEvent, date?: Date) => {
@@ -765,6 +754,21 @@ function ContributionSheet({
         style={styles.noteField}
         value={note}
       />
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: addToExpenses }}
+        android_ripple={{ color: colors.press }}
+        onPress={() => setAddToExpenses((current) => !current)}
+        style={[styles.expenseToggle, { backgroundColor: colors.chipBg, borderColor: colors.border }]}
+      >
+        <View style={[styles.expenseToggleIcon, { backgroundColor: colors.surface }]}>
+          <MaterialCommunityIcons color={colors.accent} name="receipt-text-plus-outline" size={21} />
+        </View>
+        <AppText style={styles.expenseToggleLabel} variant="bodyStrong">Add to expenses</AppText>
+        <View style={[styles.expenseToggleTrack, { backgroundColor: addToExpenses ? colors.accent : colors.borderStrong }]}>
+          <View style={[styles.expenseToggleThumb, { alignSelf: addToExpenses ? "flex-end" : "flex-start" }]} />
+        </View>
+      </Pressable>
       {numericAmount >= parseAmount(goal.remaining_amount) && numericAmount > 0 ? (
         <View style={[styles.finishHint, { backgroundColor: colors.successBg }]}>
           <MaterialCommunityIcons color={colors.success} name="party-popper" size={20} />
@@ -936,6 +940,39 @@ const styles = StyleSheet.create({
     marginBottom: dsSpace[2],
     marginTop: dsSpace[1],
   },
+  expenseToggle: {
+    alignItems: "center",
+    borderRadius: dsRadius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[1.5],
+    minHeight: 60,
+    paddingHorizontal: dsSpace[1.5],
+  },
+  expenseToggleIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  expenseToggleLabel: {
+    flex: 1,
+  },
+  expenseToggleThumb: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: dsRadius.pill,
+    height: 18,
+    margin: 3,
+    width: 18,
+  },
+  expenseToggleTrack: {
+    borderRadius: dsRadius.pill,
+    height: 24,
+    justifyContent: "center",
+    width: 44,
+  },
   datePickerWrap: {
     gap: dsSpace[1],
     marginBottom: dsSpace[1.5],
@@ -954,9 +991,6 @@ const styles = StyleSheet.create({
   healthActionRow: {
     alignItems: "flex-start",
     marginTop: dsSpace[1.5],
-  },
-  healthBody: {
-    marginTop: dsSpace[0.5],
   },
   healthCard: {
     borderWidth: 0,
@@ -989,10 +1023,6 @@ const styles = StyleSheet.create({
   heroCard: {
     borderRadius: dsRadius.lg,
     padding: dsSpace[3],
-  },
-  heroDescription: {
-    color: "rgba(255,255,255,0.74)",
-    marginTop: dsSpace[0.5],
   },
   heroFooter: {
     flexDirection: "row",

@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from expenses.models import Goal, GoalContribution
+from expenses.models import Expense, Goal, GoalContribution
 from expenses.services.goals import (
     calculate_goal_metrics,
     month_start,
@@ -145,6 +145,7 @@ class GoalApiTests(APITestCase):
             f"/api/goals/{goal_id}/contributions/",
             {
                 "amount": "400.00",
+                "add_to_expenses": True,
                 "contribution_date": self.today.isoformat(),
                 "note": "First transfer",
             },
@@ -159,6 +160,10 @@ class GoalApiTests(APITestCase):
         self.assertEqual(first.status_code, 201)
         self.assertFalse(first.data["just_completed"])
         self.assertEqual(first.data["goal"]["saved_amount"], "400.00")
+        self.assertIsNotNone(first.data["contribution"]["expense"])
+        linked_expense = Expense.objects.get(pk=first.data["contribution"]["expense"])
+        self.assertEqual(linked_expense.amount, Decimal("400.00"))
+        self.assertEqual(linked_expense.expense_date, self.today)
         self.assertEqual(second.status_code, 201)
         self.assertTrue(second.data["just_completed"])
         self.assertEqual(second.data["goal"]["status"], "completed")
@@ -197,6 +202,30 @@ class GoalApiTests(APITestCase):
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(deleted.data["goal"]["saved_amount"], "0.00")
         self.assertFalse(GoalContribution.objects.filter(pk=contribution_id).exists())
+
+    def test_deleting_a_linked_contribution_removes_its_expense(self):
+        goal_id = self.create_goal(target_amount="500.00").data["id"]
+        created = self.client.post(
+            f"/api/goals/{goal_id}/contributions/",
+            {
+                "amount": "125.00",
+                "add_to_expenses": True,
+                "contribution_date": self.today.isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(created.status_code, 201)
+        contribution_id = created.data["contribution"]["id"]
+        expense_id = created.data["contribution"]["expense"]
+        self.assertTrue(Expense.objects.filter(pk=expense_id).exists())
+
+        deleted = self.client.delete(
+            f"/api/goals/{goal_id}/contributions/{contribution_id}/"
+        )
+
+        self.assertEqual(deleted.status_code, 200)
+        self.assertFalse(Expense.objects.filter(pk=expense_id).exists())
 
     def test_target_edit_can_complete_and_reopen_goal(self):
         goal_id = self.create_goal(target_amount="1000.00").data["id"]

@@ -618,6 +618,7 @@ class BillOccurrenceSerializer(serializers.ModelSerializer):
 
 class GoalContributionSerializer(serializers.ModelSerializer):
     contribution_date = serializers.DateField(default=timezone.localdate)
+    add_to_expenses = serializers.BooleanField(default=False, required=False, write_only=True)
 
     class Meta:
         model = GoalContribution
@@ -626,10 +627,12 @@ class GoalContributionSerializer(serializers.ModelSerializer):
             "amount",
             "contribution_date",
             "note",
+            "expense",
+            "add_to_expenses",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "expense", "created_at", "updated_at"]
         extra_kwargs = {
             "amount": {"min_value": Decimal("0.01")},
         }

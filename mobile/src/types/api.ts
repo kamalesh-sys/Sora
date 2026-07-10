@@ -355,6 +355,7 @@ export type GoalContribution = {
   amount: string;
   contribution_date: string;
   note: string;
+  expense: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -404,6 +405,7 @@ export type SaveGoalPayload = {
 export type AddGoalContributionPayload = {
   amount: string;
   contribution_date: string;
+  add_to_expenses?: boolean;
   note?: string;
 };
 

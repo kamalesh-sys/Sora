@@ -580,7 +580,28 @@ class GoalViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             locked_goal = Goal.objects.select_for_update().get(pk=goal.pk, user=request.user)
             was_completed = locked_goal.status == Goal.Status.COMPLETED
+            add_to_expenses = contribution_serializer.validated_data.pop("add_to_expenses", False)
             contribution = contribution_serializer.save(goal=locked_goal)
+            if add_to_expenses:
+                savings_category = ExpenseCategory.objects.filter(
+                    user=request.user,
+                    name__iexact="Savings",
+                ).first()
+                expense = Expense.objects.create(
+                    user=request.user,
+                    created_by=request.user,
+                    paid_by_user=request.user,
+                    title=f"{locked_goal.name} contribution",
+                    amount=contribution.amount,
+                    category=savings_category,
+                    expense_date=contribution.contribution_date,
+                    payment_method=Expense.PaymentMethod.UPI,
+                    visibility=Expense.Visibility.PRIVATE,
+                    expense_type=Expense.ExpenseType.PERSONAL,
+                    note=contribution.note,
+                )
+                contribution.expense = expense
+                contribution.save(update_fields=["expense", "updated_at"])
             synchronize_goal_completion(locked_goal)
             locked_goal.refresh_from_db(fields=["status", "completed_at", "updated_at"])
             just_completed = not was_completed and locked_goal.status == Goal.Status.COMPLETED
@@ -614,7 +635,10 @@ class GoalViewSet(viewsets.ModelViewSet):
             )
             was_completed = locked_goal.status == Goal.Status.COMPLETED
             if request.method == "DELETE":
+                linked_expense = locked_contribution.expense
                 locked_contribution.delete()
+                if linked_expense:
+                    linked_expense.delete()
                 synchronize_goal_completion(locked_goal)
                 fresh_goal = self._fresh_goal(goal.pk)
                 return Response({"goal": self.get_serializer(fresh_goal).data})
@@ -625,7 +649,14 @@ class GoalViewSet(viewsets.ModelViewSet):
                 partial=True,
             )
             contribution_serializer.is_valid(raise_exception=True)
+            contribution_serializer.validated_data.pop("add_to_expenses", None)
             contribution = contribution_serializer.save()
+            if contribution.expense_id:
+                Expense.objects.filter(pk=contribution.expense_id).update(
+                    amount=contribution.amount,
+                    expense_date=contribution.contribution_date,
+                    note=contribution.note,
+                )
             synchronize_goal_completion(locked_goal)
             locked_goal.refresh_from_db(fields=["status", "completed_at", "updated_at"])
             just_completed = not was_completed and locked_goal.status == Goal.Status.COMPLETED

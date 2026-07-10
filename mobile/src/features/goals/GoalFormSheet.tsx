@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -20,9 +20,7 @@ import {
   defaultGoalDate,
   fromDateInputValue,
   getGoalIcon,
-  goalColorWash,
   isFutureDate,
-  safeGoalColor,
   sanitizeGoalAmount,
   toDateInputValue,
 } from "./goalUi";
@@ -56,7 +54,6 @@ export function GoalFormSheet({
 }: GoalFormSheetProps) {
   const { colors } = useDs();
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState(defaultGoalDate());
   const [templateKey, setTemplateKey] = useState("");
@@ -65,17 +62,11 @@ export function GoalFormSheet({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.key === templateKey) ?? null,
-    [templateKey, templates]
-  );
-
   useEffect(() => {
     if (!visible) return;
 
     const template = initialTemplate ?? null;
     setName(goal?.name ?? template?.name ?? "");
-    setDescription(goal?.description ?? template?.description ?? "");
     setTargetAmount(goal?.target_amount ?? "");
     setTargetDate(goal?.target_date ?? defaultGoalDate(template?.suggested_months ?? 12));
     setTemplateKey(goal?.template_key ?? template?.key ?? "");
@@ -88,7 +79,6 @@ export function GoalFormSheet({
   const applyTemplate = (template: GoalTemplate) => {
     setTemplateKey(template.key);
     setName(template.name);
-    setDescription(template.description);
     setIcon(template.icon);
     setColor(template.color);
     setTargetDate(defaultGoalDate(template.suggested_months));
@@ -121,7 +111,6 @@ export function GoalFormSheet({
     const amount = parseAmount(targetAmount);
     onSave({
       color: color || undefined,
-      description: description.trim(),
       icon,
       name: name.trim(),
       target_amount: amount.toFixed(2),
@@ -163,7 +152,6 @@ export function GoalFormSheet({
           >
             {templates.map((template) => {
               const active = template.key === templateKey;
-              const templateColor = safeGoalColor(template.color, colors.accent);
               return (
                 <Pressable
                   accessibilityLabel={`Use ${template.name} template`}
@@ -175,14 +163,14 @@ export function GoalFormSheet({
                   style={[
                     styles.templateCard,
                     {
-                      backgroundColor: active ? goalColorWash(templateColor) : colors.surfaceAlt,
-                      borderColor: active ? templateColor : colors.border,
+                      backgroundColor: active ? colors.chipBg : colors.surfaceAlt,
+                      borderColor: active ? colors.accent : colors.border,
                     },
                   ]}
                 >
-                  <View style={[styles.templateIcon, { backgroundColor: goalColorWash(templateColor) }]}>
+                  <View style={[styles.templateIcon, { backgroundColor: colors.chipBg }]}>
                     <MaterialCommunityIcons
-                      color={templateColor}
+                      color={colors.accent}
                       name={getGoalIcon(template.icon, template.key)}
                       size={22}
                     />
@@ -246,9 +234,6 @@ export function GoalFormSheet({
         </View>
         <View style={styles.dateText}>
           <AppText variant="bodyStrong">{formatDateLabel(targetDate)}</AppText>
-          <AppText color="textSubtle" variant="caption">
-            Tap to change
-          </AppText>
         </View>
         <MaterialCommunityIcons color={colors.textSubtle} name="chevron-right" size={22} />
       </Pressable>
@@ -274,25 +259,6 @@ export function GoalFormSheet({
         </View>
       ) : null}
 
-      <FormField
-        inputStyle={styles.descriptionInput}
-        label="Note (optional)"
-        multiline
-        numberOfLines={3}
-        onChangeText={setDescription}
-        placeholder="What are you saving for?"
-        style={styles.fieldGap}
-        value={description}
-      />
-
-      {selectedTemplate ? (
-        <View style={[styles.helperCard, { backgroundColor: colors.infoBg }]}>
-          <MaterialCommunityIcons color={colors.info} name="lightbulb-on-outline" size={20} />
-          <AppText color="textMuted" style={styles.helperCardText} variant="caption">
-            The template only sets a useful starting date. You stay in control of the amount and can edit everything.
-          </AppText>
-        </View>
-      ) : null}
     </AppBottomSheet>
   );
 }
@@ -322,24 +288,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  descriptionInput: {
-    minHeight: 88,
-    paddingTop: dsSpace[1.5],
-    textAlignVertical: "top",
-  },
   fieldGap: {
     marginBottom: dsSpace[1.5],
-  },
-  helperCard: {
-    alignItems: "flex-start",
-    borderRadius: dsRadius.md,
-    flexDirection: "row",
-    gap: dsSpace[1],
-    marginBottom: dsSpace[1],
-    padding: dsSpace[1.5],
-  },
-  helperCardText: {
-    flex: 1,
   },
   helperText: {
     marginBottom: dsSpace[1.5],

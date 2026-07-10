@@ -266,7 +266,7 @@ function AccountTray({
 }) {
   const { colors } = useDs();
   const { t } = useAppSettings();
-  const open = (route: "Goals" | "Profile") => {
+  const open = (route: "Goals" | "Profile" | "Categories" | "People" | "Reports") => {
     onClose();
     navigation.navigate(route);
   };
@@ -284,39 +284,46 @@ function AccountTray({
           <AppText numberOfLines={1} style={styles.accountName} variant="title">
             {name}
           </AppText>
-          <AppText color="textSubtle" numberOfLines={1} variant="body">
-            {email || "Personal expense account"}
-          </AppText>
+          {email ? (
+            <AppText color="textSubtle" numberOfLines={1} variant="body">
+              {email}
+            </AppText>
+          ) : null}
         </View>
 
         <AppButton block icon="cog-outline" onPress={() => open("Profile")} style={styles.accountPrimaryAction} variant="secondary">
           Profile & settings
         </AppButton>
 
-        <View style={[styles.accountContext, { backgroundColor: colors.chipBg, borderColor: colors.border }]}>
-          <View style={[styles.accountContextIcon, { backgroundColor: colors.surface }]}>
-            <MaterialCommunityIcons color={colors.accent} name="wallet-outline" size={22} />
-          </View>
-          <View style={styles.accountContextCopy}>
-            <AppText variant="bodyStrong">Personal tracker</AppText>
-            <AppText color="textSubtle" variant="caption">Your spending stays private to this account.</AppText>
-          </View>
-        </View>
-
         <View style={[styles.accountLinks, { borderTopColor: colors.border }]}>
-          <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={() => open("Goals")} style={styles.accountLink}>
-            <View style={[styles.accountLinkIcon, { backgroundColor: colors.chipBg }]}>
-              <MaterialCommunityIcons color={colors.text} name="target" size={22} />
-            </View>
-            <View style={styles.accountLinkCopy}>
-              <AppText variant="bodyStrong">Goals</AppText>
-              <AppText color="textSubtle" variant="caption">Targets, progress, and monthly plans</AppText>
-            </View>
-            <MaterialCommunityIcons color={colors.textSubtle} name="chevron-right" size={22} />
-          </Pressable>
+          <AccountLink icon="target" label="Goals" onPress={() => open("Goals")} />
+          <AccountLink icon="tag-multiple-outline" label="Categories" onPress={() => open("Categories")} />
+          <AccountLink icon="account-multiple-outline" label="People" onPress={() => open("People")} />
+          <AccountLink icon="chart-bar" label="Reports" onPress={() => open("Reports")} />
         </View>
       </View>
     </AppBottomSheet>
+  );
+}
+
+function AccountLink({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  const { colors } = useDs();
+  return (
+    <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress} style={styles.accountLink}>
+      <View style={[styles.accountLinkIcon, { backgroundColor: colors.chipBg }]}>
+        <MaterialCommunityIcons color={colors.text} name={icon} size={22} />
+      </View>
+      <AppText style={styles.accountLinkCopy} variant="bodyStrong">{label}</AppText>
+      <MaterialCommunityIcons color={colors.textSubtle} name="chevron-right" size={22} />
+    </Pressable>
   );
 }
 
@@ -404,26 +411,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  accountContext: {
-    alignItems: "center",
-    borderRadius: dsRadius.md,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: dsSpace[1.5],
-    marginBottom: dsSpace[2],
-    padding: dsSpace[1.5],
-  },
-  accountContextCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  accountContextIcon: {
-    alignItems: "center",
-    borderRadius: dsRadius.pill,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
   accountIdentity: {
     alignItems: "center",
     marginBottom: dsSpace[2.5],
@@ -432,7 +419,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: dsSpace[1.5],
-    minHeight: 72,
+    minHeight: 60,
   },
   accountLinkCopy: {
     flex: 1,

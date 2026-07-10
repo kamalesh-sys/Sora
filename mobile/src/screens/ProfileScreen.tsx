@@ -26,20 +26,6 @@ import type { RootStackParamList } from "../navigation/RootNavigator";
 type Props = NativeStackScreenProps<RootStackParamList, "Profile" | "Settings">;
 
 const appVersion = "1.0.0";
-const moneyNotes = [
-  {
-    title: "Use one spending account",
-    text: "Keep daily UPI and cash spending visible in one place so the monthly picture stays honest.",
-  },
-  {
-    title: "Review every Sunday",
-    text: "A 10-minute weekly check catches grocery, delivery, transport and food delivery before month-end.",
-  },
-  {
-    title: "Keep fixed bills recurring",
-    text: "Add rent, internet, subscriptions, school fees and EMIs as bills so upcoming cash needs are clear.",
-  },
-];
 
 export function ProfileScreen({ navigation }: Props) {
   const { colors } = useDs();
@@ -180,14 +166,6 @@ export function ProfileScreen({ navigation }: Props) {
         <ListRow description={t("People, balances and history")} icon="account-multiple-outline" onPress={() => navigation.navigate("People")} title={t("People")} />
         <ListRow description={t("CSV and PDF are available from Reports")} icon="file-export-outline" onPress={() => navigation.navigate("Reports")} title={t("Export data")} />
       </AppCard>
-
-      <SectionHeader title={t("Money notes")} />
-      {moneyNotes.map((note) => (
-        <AppCard key={note.title}>
-          <AppText variant="bodyStrong">{t(note.title)}</AppText>
-          <AppText color="textMuted" style={styles.noteText} variant="body">{t(note.text)}</AppText>
-        </AppCard>
-      ))}
 
       <SectionHeader title={t("About")} />
       <AppCard>
@@ -332,8 +310,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[1],
     marginBottom: dsSpace[2],
-  },
-  noteText: {
-    marginTop: dsSpace[0.5],
   },
 });

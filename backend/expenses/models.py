@@ -814,6 +814,13 @@ class GoalContribution(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     contribution_date = models.DateField()
     note = models.TextField(blank=True)
+    expense = models.ForeignKey(
+        Expense,
+        null=True,
+        blank=True,
+        related_name="goal_contributions",
+        on_delete=models.SET_NULL,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

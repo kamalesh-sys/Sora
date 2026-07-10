@@ -5,7 +5,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import {
-  AppButton,
   AppCard,
   AppScreen,
   AppSegmentedControl,
@@ -17,12 +16,12 @@ import {
   SectionHeader,
   SkeletonBlock,
   StatusTag,
-  dsColorPrimitives,
   dsRadius,
   dsSpace,
   useDs,
 } from "../design-system";
 import { useFeedback } from "../context/FeedbackContext";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { useI18n } from "../i18n";
 import { GoalFormSheet } from "../features/goals/GoalFormSheet";
 import {
@@ -49,6 +48,7 @@ const filterItems: Array<{ label: string; value: GoalFilter }> = [
 
 export function GoalsScreen({ navigation }: Props) {
   const { colors } = useDs();
+  const { themeMode } = useAppSettings();
   const { success } = useFeedback();
   const { t } = useI18n();
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -69,9 +69,8 @@ export function GoalsScreen({ navigation }: Props) {
   const totalSaved = activeGoals.reduce((sum, goal) => sum + parseAmount(goal.saved_amount), 0);
   const totalTarget = activeGoals.reduce((sum, goal) => sum + parseAmount(goal.target_amount), 0);
   const overallProgress = totalTarget > 0 ? Math.min(1, totalSaved / totalTarget) : 0;
-  const attentionCount = activeGoals.filter(
-    (goal) => goal.health_status === "at_risk" || goal.health_status === "overdue"
-  ).length;
+  const heroBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
+  const heroIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
 
   const load = useCallback(async (showInitialLoading = false) => {
     if (showInitialLoading) setLoading(true);
@@ -89,7 +88,7 @@ export function GoalsScreen({ navigation }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -131,9 +130,6 @@ export function GoalsScreen({ navigation }: Props) {
         <IconButton accessibilityLabel={t("Back to home")} icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
           <AppText variant="title">{t("Goals")}</AppText>
-          <AppText color="textSubtle" variant="caption">
-            {t("Save steadily for what matters")}
-          </AppText>
         </View>
         <IconButton accessibilityLabel={t("Create goal")} icon="plus" onPress={() => openEditor()} tone="primary" />
       </View>
@@ -153,58 +149,36 @@ export function GoalsScreen({ navigation }: Props) {
         />
       ) : (
         <>
-          <AppCard elevated style={[styles.overviewCard, { backgroundColor: colors.bgInverse, borderColor: colors.bgInverse }]}>
+          {activeGoals.length ? (
+          <AppCard elevated style={[styles.overviewCard, { backgroundColor: heroBackground, borderColor: heroBackground }]}>
             <View style={styles.overviewTop}>
               <View style={styles.overviewCopy}>
                 <AppText style={styles.inverseMuted} variant="caption">
-                  {activeGoals.length ? "Saved across active goals" : "Your next milestone"}
+                  Saved
                 </AppText>
                 <AppText numberOfLines={1} style={styles.inverseTitle} variant="title">
-                  {activeGoals.length ? formatCurrencyCompact(totalSaved) : "Start small"}
+                  {formatCurrencyCompact(totalSaved)}
                 </AppText>
                 <AppText style={styles.inverseMuted} variant="body">
-                  {activeGoals.length
-                    ? `${activeGoals.length} active ${activeGoals.length === 1 ? "goal" : "goals"}`
-                    : "Pick a target and Sora will work out the monthly pace."}
+                  {formatCurrencyCompact(totalTarget)} target
                 </AppText>
               </View>
-              <View style={[styles.overviewIcon, { backgroundColor: colors.accent }]}>
+              <View style={[styles.overviewIcon, { backgroundColor: heroIconBackground }]}>
                 <MaterialCommunityIcons color="#FFFFFF" name="flag-checkered" size={26} />
               </View>
             </View>
-            {activeGoals.length ? (
-              <>
-                <ProgressBar
-                  accessibilityLabel={`${Math.round(overallProgress * 100)}% saved across active goals`}
-                  color={dsColorPrimitives.gray0}
-                  progress={overallProgress}
-                  style={styles.overviewProgress}
-                />
-                <View style={styles.overviewFooter}>
-                  <AppText style={styles.inverseMuted} variant="caption">
-                    {formatCurrencyCompact(totalTarget)} combined target
-                  </AppText>
-                  {attentionCount ? (
-                    <AppText style={{ color: colors.warning }} variant="caption">
-                      {attentionCount} {attentionCount === 1 ? "plan needs" : "plans need"} attention
-                    </AppText>
-                  ) : (
-                    <AppText style={{ color: colors.success }} variant="caption">
-                      Plans on track
-                    </AppText>
-                  )}
-                </View>
-              </>
-            ) : (
-              <AppButton onPress={() => openEditor()} style={styles.overviewButton} variant="secondary">
-                Create a goal
-              </AppButton>
-            )}
+            <ProgressBar
+              accessibilityLabel={`${Math.round(overallProgress * 100)}% saved`}
+              color="#FFFFFF"
+              progress={overallProgress}
+              style={styles.overviewProgress}
+            />
           </AppCard>
+          ) : null}
 
           {templates.length ? (
             <>
-              <SectionHeader title="Quick starts" />
+              <SectionHeader title="Quick start" />
               <ScrollView
                 contentContainerStyle={styles.templateRail}
                 horizontal
@@ -220,10 +194,10 @@ export function GoalsScreen({ navigation }: Props) {
           {goals.length ? (
             <>
               <View style={styles.goalSectionHeader}>
-                <SectionHeader title="Your goals" />
+                <SectionHeader title="Goals" />
                 <AppSegmentedControl
                   accessibilityLabel="Goal status"
-                  items={filterItems}
+                  items={filterItems.map((item) => ({ ...item, label: t(item.label) }))}
                   onChange={setFilter}
                   style={styles.filterControl}
                   value={filter}
@@ -240,11 +214,6 @@ export function GoalsScreen({ navigation }: Props) {
               ) : (
                 <EmptyState
                   action={filter === "active" ? "Create goal" : undefined}
-                  body={
-                    filter === "active"
-                      ? "Your completed goals are safe in the Completed view."
-                      : "Completed goals will stay here with their full contribution history."
-                  }
                   icon={filter === "active" ? "flag-outline" : "trophy-outline"}
                   onAction={filter === "active" ? () => openEditor() : undefined}
                   title={filter === "active" ? "No active goals" : "No completed goals yet"}
@@ -253,11 +222,10 @@ export function GoalsScreen({ navigation }: Props) {
             </>
           ) : (
             <EmptyState
-              action="Create your first goal"
-              body="Set an amount and date. Sora will show a clear monthly contribution, then adjust it when life changes."
+              action="Create goal"
               icon="target"
               onAction={() => openEditor()}
-              title="Turn a plan into progress"
+              title="No goals yet"
             />
           )}
         </>
@@ -278,7 +246,6 @@ export function GoalsScreen({ navigation }: Props) {
 
 function GoalTemplateCard({ onPress, template }: { onPress: () => void; template: GoalTemplate }) {
   const { colors } = useDs();
-  const color = safeGoalColor(template.color, colors.accent);
   return (
     <Pressable
       accessibilityLabel={`Create ${template.name} goal`}
@@ -287,15 +254,15 @@ function GoalTemplateCard({ onPress, template }: { onPress: () => void; template
       onPress={onPress}
       style={[styles.quickStartCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
-      <View style={[styles.quickStartIcon, { backgroundColor: goalColorWash(color) }]}>
-        <MaterialCommunityIcons color={color} name={getGoalIcon(template.icon, template.key)} size={24} />
+      <View style={[styles.quickStartIcon, { backgroundColor: colors.chipBg }]}>
+        <MaterialCommunityIcons color={colors.accent} name={getGoalIcon(template.icon, template.key)} size={24} />
       </View>
       <View style={styles.quickStartText}>
         <AppText numberOfLines={2} variant="bodyStrong">
           {template.name}
         </AppText>
         <AppText color="textSubtle" numberOfLines={1} variant="caption">
-          {template.suggested_months} month plan
+          {template.suggested_months} months
         </AppText>
       </View>
       <MaterialCommunityIcons color={colors.textSubtle} name="arrow-top-right" size={20} />
@@ -473,10 +440,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 40,
   },
-  overviewButton: {
-    alignSelf: "flex-start",
-    marginTop: dsSpace[2],
-  },
   overviewCard: {
     borderRadius: dsRadius.lg,
     padding: dsSpace[3],
@@ -484,12 +447,6 @@ const styles = StyleSheet.create({
   overviewCopy: {
     flex: 1,
     minWidth: 0,
-  },
-  overviewFooter: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: dsSpace[1],
   },
   overviewIcon: {
     alignItems: "center",
