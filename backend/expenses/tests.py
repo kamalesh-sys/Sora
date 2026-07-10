@@ -399,3 +399,167 @@ class BudgetRecurringReportTests(APITestCase):
 
         occurrence.refresh_from_db()
         self.assertEqual(occurrence.status, BillOccurrence.Status.OVERDUE)
+
+
+class IncomeTransactionApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="income-user",
+            email="income@example.com",
+            password="pass12345",
+        )
+        self.expense_category = ExpenseCategory.objects.create(
+            user=self.user,
+            name="Food",
+            transaction_type=ExpenseCategory.TransactionType.EXPENSE,
+        )
+        self.income_category = ExpenseCategory.objects.create(
+            user=self.user,
+            name="Salary",
+            transaction_type=ExpenseCategory.TransactionType.INCOME,
+        )
+        self.client.force_authenticate(self.user)
+
+    def _create_income(self, amount="5000.00"):
+        return self.client.post(
+            "/api/transactions/",
+            {
+                "title": "July salary",
+                "amount": amount,
+                "transaction_type": "income",
+                "category": self.income_category.id,
+                "payment_method": "bank",
+                "expense_date": "2026-07-05",
+            },
+            format="json",
+        )
+
+    def _create_expense(self, amount="1200.00"):
+        return self.client.post(
+            "/api/expenses/",
+            {
+                "title": "Groceries",
+                "amount": amount,
+                "category": self.expense_category.id,
+                "payment_method": "upi",
+                "expense_date": "2026-07-06",
+            },
+            format="json",
+        )
+
+    def test_income_increases_wallet_and_expense_decreases_it(self):
+        income = self._create_income()
+        expense = self._create_expense()
+
+        self.assertEqual(income.status_code, 201)
+        self.assertEqual(income.data["transaction_type"], Expense.TransactionType.INCOME)
+        self.assertEqual(expense.status_code, 201)
+        self.assertEqual(expense.data["transaction_type"], Expense.TransactionType.EXPENSE)
+
+        summary = self.client.get("/api/reports/dashboard-summary/?month=2026-07")
+
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(summary.data["summary"]["total_income"], "5000.00")
+        self.assertEqual(summary.data["summary"]["total_expense"], "1200.00")
+        self.assertEqual(summary.data["summary"]["net_cash_flow"], "3800.00")
+        self.assertEqual(summary.data["summary"]["wallet_balance"], "3800.00")
+        self.assertEqual(summary.data["summary"]["transaction_count"], 2)
+        self.assertEqual(len(summary.data["recent_transactions"]), 2)
+        self.assertEqual(len(summary.data["recent_expenses"]), 1)
+
+    def test_transaction_endpoint_coexists_with_legacy_expense_endpoint(self):
+        self._create_income()
+        self._create_expense()
+
+        transactions = self.client.get("/api/transactions/?month=2026-07")
+        legacy_expenses = self.client.get("/api/expenses/?month=2026-07")
+        income_only = self.client.get("/api/transactions/?month=2026-07&transaction_type=income")
+
+        self.assertEqual(len(transactions.data), 2)
+        self.assertEqual(len(legacy_expenses.data), 1)
+        self.assertEqual(legacy_expenses.data[0]["transaction_type"], "expense")
+        self.assertEqual(len(income_only.data), 1)
+        self.assertEqual(income_only.data[0]["transaction_type"], "income")
+
+    def test_income_category_and_sharing_rules_are_enforced(self):
+        wrong_category = self.client.post(
+            "/api/transactions/",
+            {
+                "title": "Salary",
+                "amount": "5000.00",
+                "transaction_type": "income",
+                "category": self.expense_category.id,
+                "payment_method": "bank",
+                "expense_date": "2026-07-05",
+            },
+            format="json",
+        )
+        shared_income = self.client.post(
+            "/api/transactions/",
+            {
+                "title": "Shared income",
+                "amount": "5000.00",
+                "transaction_type": "income",
+                "category": self.income_category.id,
+                "payment_method": "bank",
+                "expense_date": "2026-07-05",
+                "expense_type": "shared",
+            },
+            format="json",
+        )
+        zero_amount = self._create_income(amount="0.00")
+
+        self.assertEqual(wrong_category.status_code, 400)
+        self.assertIn("category", wrong_category.data)
+        self.assertEqual(shared_income.status_code, 400)
+        self.assertIn("expense_type", shared_income.data)
+        self.assertEqual(zero_amount.status_code, 400)
+        self.assertIn("amount", zero_amount.data)
+
+    def test_category_endpoints_default_to_expense_for_old_clients(self):
+        default_categories = self.client.get("/api/categories/")
+        income_categories = self.client.get("/api/categories/?transaction_type=income")
+
+        self.assertEqual([row["name"] for row in default_categories.data], ["Food"])
+        self.assertEqual([row["name"] for row in income_categories.data], ["Salary"])
+
+    def test_editing_or_deleting_income_recalculates_wallet(self):
+        created = self._create_income()
+        transaction_id = created.data["id"]
+        updated = self.client.put(
+            f"/api/transactions/{transaction_id}/",
+            {
+                "title": "July salary revised",
+                "amount": "6000.00",
+                "transaction_type": "income",
+                "category": self.income_category.id,
+                "payment_method": "bank",
+                "expense_date": "2026-07-05",
+            },
+            format="json",
+        )
+        after_update = self.client.get("/api/reports/monthly-summary/?month=2026-07")
+        deleted = self.client.delete(f"/api/transactions/{transaction_id}/")
+        after_delete = self.client.get("/api/reports/monthly-summary/?month=2026-07")
+
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(after_update.data["wallet_balance"], "6000.00")
+        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(after_delete.data["wallet_balance"], "0.00")
+
+    def test_exports_include_both_transaction_directions(self):
+        self._create_income()
+        self._create_expense()
+
+        csv_response = self.client.get("/api/reports/export-csv/?month=2026-07")
+        pdf_response = self.client.get("/api/reports/export-pdf/?month=2026-07")
+        csv_text = csv_response.content.decode("utf-8")
+
+        self.assertEqual(csv_response.status_code, 200)
+        self.assertIn("Date,Type,Title", csv_text)
+        self.assertIn("Income,July salary", csv_text)
+        self.assertIn("Expense,Groceries", csv_text)
+        self.assertIn("sora-transactions-2026-07.csv", csv_response["Content-Disposition"])
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertTrue(pdf_response.content.startswith(b"%PDF"))
+        self.assertIn("sora-transaction-report-2026-07.pdf", pdf_response["Content-Disposition"])

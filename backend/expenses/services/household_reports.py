@@ -32,11 +32,14 @@ def get_household_monthly_report(user, household, month):
         and member.visibility_level != HouseholdMember.VisibilityLevel.FULL_HOUSEHOLD
     )
     start, end = parse_month_range(month)
-    expenses = Expense.objects.select_related("category", "paid_by_user", "paid_by_person").filter(
+    transactions = Expense.objects.select_related("category", "paid_by_user", "paid_by_person").filter(
         household=household,
         expense_date__range=(start, end),
     )
+    expenses = transactions.filter(transaction_type=Expense.TransactionType.EXPENSE)
+    income = transactions.filter(transaction_type=Expense.TransactionType.INCOME)
     total_spent = _decimal(expenses.aggregate(total=Sum("amount"))["total"])
+    total_income = _decimal(income.aggregate(total=Sum("amount"))["total"])
     budget = household.monthly_budget or Decimal("0.00")
 
     category_breakdown = [
@@ -104,9 +107,13 @@ def get_household_monthly_report(user, household, month):
         "household": {"id": household.id, "name": household.name},
         "month": start.strftime("%Y-%m"),
         "total_spent": str(money(total_spent)),
+        "total_income": str(money(total_income)),
+        "net_cash_flow": str(money(total_income - total_spent)),
         "household_budget": str(money(budget)),
         "remaining": str(money(budget - total_spent)),
         "expense_count": expenses.count(),
+        "income_count": income.count(),
+        "transaction_count": transactions.count(),
         "category_breakdown": category_breakdown,
         "payment_method_breakdown": payment_method_breakdown,
         "paid_by_breakdown": paid_by_breakdown,
@@ -129,6 +136,8 @@ def build_household_monthly_report_csv(report_data):
     writer.writerow(["Household", report_data["household"]["name"]])
     writer.writerow(["Month", report_data["month"]])
     writer.writerow(["Total Spent", report_data["total_spent"]])
+    writer.writerow(["Total Income", report_data["total_income"]])
+    writer.writerow(["Net Cash Flow", report_data["net_cash_flow"]])
     writer.writerow(["Budget", report_data["household_budget"]])
     writer.writerow(["Remaining", report_data["remaining"]])
     writer.writerow([])
@@ -158,13 +167,15 @@ def build_household_monthly_report_pdf(report_data):
         Spacer(1, 0.15 * inch),
         _table(
             [
-                ["Month", "Total Spent", "Budget", "Remaining", "Expense Count"],
+                ["Month", "Income", "Spent", "Net Cash Flow", "Budget", "Remaining", "Transactions"],
                 [
                     report_data["month"],
+                    report_data["total_income"],
                     report_data["total_spent"],
+                    report_data["net_cash_flow"],
                     report_data["household_budget"],
                     report_data["remaining"],
-                    str(report_data["expense_count"]),
+                    str(report_data["transaction_count"]),
                 ],
             ]
         ),

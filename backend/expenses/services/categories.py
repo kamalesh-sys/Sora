@@ -1,3 +1,6 @@
+from expenses.models import ExpenseCategory
+
+
 DEFAULT_EXPENSE_CATEGORIES = [
     {"name": "Groceries", "icon": "cart-outline", "color": "#62c690"},
     {"name": "Utilities", "icon": "lightning-bolt", "color": "#7199ff"},
@@ -11,13 +14,39 @@ DEFAULT_EXPENSE_CATEGORIES = [
     {"name": "Others", "icon": "dots-horizontal", "color": "#a6adba"},
 ]
 
+DEFAULT_INCOME_CATEGORIES = [
+    {"name": "Salary", "icon": "briefcase-outline", "color": "#2E7D5B"},
+    {"name": "Business", "icon": "storefront-outline", "color": "#3478F6"},
+    {"name": "Freelance", "icon": "laptop", "color": "#6558D3"},
+    {"name": "Interest", "icon": "bank-outline", "color": "#A36A00"},
+    {"name": "Refund", "icon": "cash-refund", "color": "#168A72"},
+    {"name": "Gift", "icon": "gift-outline", "color": "#B43A70"},
+    {"name": "Other income", "icon": "plus-circle-outline", "color": "#667085"},
+]
 
-def seed_default_categories(user):
+
+def seed_default_categories(user, transaction_type=ExpenseCategory.TransactionType.EXPENSE):
     categories = []
 
-    for preset in DEFAULT_EXPENSE_CATEGORIES:
+    if transaction_type not in ExpenseCategory.TransactionType.values:
+        raise ValueError("Invalid transaction type.")
+
+    presets = []
+    if transaction_type == ExpenseCategory.TransactionType.EXPENSE:
+        presets.extend(
+            (ExpenseCategory.TransactionType.EXPENSE, preset)
+            for preset in DEFAULT_EXPENSE_CATEGORIES
+        )
+    if transaction_type == ExpenseCategory.TransactionType.INCOME:
+        presets.extend(
+            (ExpenseCategory.TransactionType.INCOME, preset)
+            for preset in DEFAULT_INCOME_CATEGORIES
+        )
+
+    for category_type, preset in presets:
         category, created = user.expense_categories.get_or_create(
             name=preset["name"],
+            transaction_type=category_type,
             defaults={
                 "icon": preset["icon"],
                 "color": preset["color"],

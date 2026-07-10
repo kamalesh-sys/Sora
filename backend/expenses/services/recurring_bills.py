@@ -85,6 +85,7 @@ def mark_occurrence_paid(user, occurrence, create_expense=True):
             household=bill.household,
             title=bill.name,
             amount=occurrence.amount,
+            transaction_type=Expense.TransactionType.EXPENSE,
             category=bill.category,
             payment_method=bill.payment_method,
             paid_by_user=user,

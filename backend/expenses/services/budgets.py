@@ -28,6 +28,8 @@ def create_or_update_category_budget(user, data):
     payload = dict(data)
     household = payload.get("household")
     category = payload["category"]
+    if category.transaction_type != category.TransactionType.EXPENSE:
+        raise serializers.ValidationError("Budgets require an expense category.")
     month = get_month_start(payload["month"])
 
     if household:
@@ -65,7 +67,11 @@ def get_category_budget_usage(user, month, household=None):
     rows = []
     for budget in budgets:
         spent = (
-            Expense.objects.filter(category=budget.category, **expense_filter).aggregate(total=Sum("amount"))["total"]
+            Expense.objects.filter(
+                category=budget.category,
+                transaction_type=Expense.TransactionType.EXPENSE,
+                **expense_filter,
+            ).aggregate(total=Sum("amount"))["total"]
             or Decimal("0.00")
         )
         remaining = budget.amount - spent

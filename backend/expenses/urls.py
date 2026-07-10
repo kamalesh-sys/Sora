@@ -8,6 +8,7 @@ from .views import (
     ExpenseCategoryViewSet,
     ExpenseViewSet,
     GoalViewSet,
+    HouseholdViewSet,
     MonthlyBudgetViewSet,
     PersonViewSet,
     RecurringBillViewSet,
@@ -23,6 +24,8 @@ router = DefaultRouter()
 router.register("categories", ExpenseCategoryViewSet, basename="category")
 router.register("people", PersonViewSet, basename="people")
 router.register("expenses", ExpenseViewSet, basename="expense")
+router.register("transactions", ExpenseViewSet, basename="transaction")
+router.register("households", HouseholdViewSet, basename="household")
 router.register("budgets", MonthlyBudgetViewSet, basename="budget")
 router.register("category-budgets", CategoryBudgetViewSet, basename="category-budget")
 router.register("recurring-bills", RecurringBillViewSet, basename="recurring-bill")

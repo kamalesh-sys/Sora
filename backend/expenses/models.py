@@ -24,6 +24,10 @@ class SignupOTP(models.Model):
 
 
 class ExpenseCategory(models.Model):
+    class TransactionType(models.TextChoices):
+        EXPENSE = "expense", "Expense"
+        INCOME = "income", "Income"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -34,6 +38,11 @@ class ExpenseCategory(models.Model):
     name = models.CharField(max_length=100)
     icon = models.CharField(max_length=100, blank=True)
     color = models.CharField(max_length=50, blank=True)
+    transaction_type = models.CharField(
+        max_length=10,
+        choices=TransactionType.choices,
+        default=TransactionType.EXPENSE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -41,8 +50,8 @@ class ExpenseCategory(models.Model):
         verbose_name_plural = "expense categories"
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "name"],
-                name="unique_expense_category_per_user",
+                fields=["user", "name", "transaction_type"],
+                name="unique_transaction_category_per_user",
             )
         ]
 
@@ -280,6 +289,10 @@ class HouseholdMember(models.Model):
 
 
 class Expense(models.Model):
+    class TransactionType(models.TextChoices):
+        EXPENSE = "expense", "Expense"
+        INCOME = "income", "Income"
+
     class PaymentMethod(models.TextChoices):
         UPI = "upi", "UPI"
         CASH = "cash", "Cash"
@@ -321,6 +334,11 @@ class Expense(models.Model):
     )
     title = models.CharField(max_length=200)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    transaction_type = models.CharField(
+        max_length=10,
+        choices=TransactionType.choices,
+        default=TransactionType.EXPENSE,
+    )
     category = models.ForeignKey(
         ExpenseCategory,
         null=True,
@@ -370,6 +388,10 @@ class Expense(models.Model):
             models.Index(fields=["category", "expense_date"]),
             models.Index(fields=["payment_method", "expense_date"]),
             models.Index(fields=["expense_type", "expense_date"]),
+            models.Index(fields=["user", "transaction_type", "expense_date"]),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="transaction_amount_positive"),
         ]
 
     def __str__(self):

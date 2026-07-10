@@ -52,7 +52,7 @@ class UserMiniSerializer(serializers.ModelSerializer):
 class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpenseCategory
-        fields = ["id", "name", "icon", "color", "created_at"]
+        fields = ["id", "name", "icon", "color", "transaction_type", "created_at"]
         read_only_fields = ["id", "created_at"]
 
 
@@ -349,6 +349,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "amount",
+            "transaction_type",
             "category",
             "category_detail",
             "payment_method",
@@ -401,6 +402,11 @@ class ExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Category does not belong to this user.")
         return value
 
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be greater than zero.")
+        return value
+
     def validate_paid_by_person(self, value):
         request = self.context.get("request")
         if value and request and not can_view_person(request.user, value):
@@ -419,9 +425,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
             return attrs
         household = attrs.get("household")
         category = attrs.get("category")
+        transaction_type = attrs.get("transaction_type")
+        expense_type = attrs.get("expense_type")
         if self.instance:
             household = self.instance.household if household is None else household
             category = self.instance.category if category is None else category
+            transaction_type = self.instance.transaction_type if transaction_type is None else transaction_type
+            expense_type = self.instance.expense_type if expense_type is None else expense_type
+        transaction_type = transaction_type or Expense.TransactionType.EXPENSE
+        expense_type = expense_type or Expense.ExpenseType.PERSONAL
         if household:
             if not can_create_household_expense(request.user, household):
                 raise serializers.ValidationError("Viewer cannot create household expenses.")
@@ -429,6 +441,24 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Category is not allowed for this household.")
         elif category and category.user_id != request.user.id:
             raise serializers.ValidationError("Category does not belong to this user.")
+        if category and category.transaction_type != transaction_type:
+            raise serializers.ValidationError(
+                {"category": f"Choose a category for {transaction_type} transactions."}
+            )
+        participants = attrs.get("participants")
+        if transaction_type == Expense.TransactionType.INCOME:
+            if expense_type == Expense.ExpenseType.SHARED:
+                raise serializers.ValidationError(
+                    {"expense_type": "Income cannot be split as a shared expense."}
+                )
+            if participants:
+                raise serializers.ValidationError(
+                    {"participants": "Income transactions cannot have expense shares."}
+                )
+            if self.instance and self.instance.shares.exists():
+                raise serializers.ValidationError(
+                    {"transaction_type": "Remove expense shares before changing this transaction to income."}
+                )
         return attrs
 
     def create(self, validated_data):
@@ -537,6 +567,8 @@ class CategoryBudgetSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Category is not allowed for this household.")
         elif category and category.user_id != request.user.id:
             raise serializers.ValidationError("Category does not belong to this user.")
+        if category and category.transaction_type != ExpenseCategory.TransactionType.EXPENSE:
+            raise serializers.ValidationError({"category": "Budgets require an expense category."})
         return attrs
 
     def create(self, validated_data):
@@ -590,6 +622,8 @@ class RecurringBillSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Category is not allowed for this household.")
         elif category and category.user_id != request.user.id:
             raise serializers.ValidationError("Category does not belong to this user.")
+        if category and category.transaction_type != ExpenseCategory.TransactionType.EXPENSE:
+            raise serializers.ValidationError({"category": "Recurring bills require an expense category."})
         return attrs
 
     def create(self, validated_data):

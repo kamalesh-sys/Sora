@@ -22,9 +22,9 @@ from .models import (
 
 @admin.register(ExpenseCategory)
 class ExpenseCategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "user", "icon", "color", "created_at"]
+    list_display = ["name", "transaction_type", "user", "icon", "color", "created_at"]
     search_fields = ["name", "user__email", "user__username"]
-    list_filter = ["user"]
+    list_filter = ["transaction_type", "user"]
 
 
 @admin.register(Person)
@@ -75,6 +75,7 @@ class ExpenseAdmin(admin.ModelAdmin):
         "created_by",
         "household",
         "amount",
+        "transaction_type",
         "category",
         "payment_method",
         "expense_type",
@@ -88,6 +89,7 @@ class ExpenseAdmin(admin.ModelAdmin):
         "user",
         "household",
         "payment_method",
+        "transaction_type",
         "expense_type",
         "visibility",
         "category",

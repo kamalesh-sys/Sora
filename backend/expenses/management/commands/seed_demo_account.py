@@ -65,6 +65,7 @@ class Command(BaseCommand):
         household = self.create_household(user, people)
         self.create_budgets(user, household, categories, month, previous_month)
         self.create_expenses(user, household, categories, people)
+        self.create_income_and_shared_expenses(user, household, categories, people)
         self.create_recurring_bills(user, household, categories)
         self.create_invitations(user, people)
 
@@ -76,7 +77,7 @@ class Command(BaseCommand):
 
     def create_categories(self, user):
         rows = [
-            ("Groceries", "cart-outline", "#22C55E"),
+            ("Groceries", "cart-outline", "#22C55E", ExpenseCategory.TransactionType.EXPENSE),
             ("Food & Dining", "silverware-fork-knife", "#F97316"),
             ("Utilities", "lightning-bolt-outline", "#3B82F6"),
             ("Transport", "gas-station-outline", "#EF4444"),
@@ -85,13 +86,18 @@ class Command(BaseCommand):
             ("Health", "medical-bag", "#EC4899"),
             ("Shopping", "shopping-outline", "#F59E0B"),
             ("Entertainment", "movie-open-outline", "#6366F1"),
-            ("Education", "book-open-page-variant-outline", "#14B8A6"),
+            ("Education", "book-open-page-variant-outline", "#14B8A6", ExpenseCategory.TransactionType.EXPENSE),
+            ("Salary", "briefcase-outline", "#2E7D5B", ExpenseCategory.TransactionType.INCOME),
+            ("Freelance", "laptop", "#6558D3", ExpenseCategory.TransactionType.INCOME),
         ]
         categories = {}
-        for name, icon, color in rows:
+        for row in rows:
+            name, icon, color = row[:3]
+            transaction_type = row[3] if len(row) > 3 else ExpenseCategory.TransactionType.EXPENSE
             category, _ = ExpenseCategory.objects.update_or_create(
                 user=user,
                 name=name,
+                transaction_type=transaction_type,
                 defaults={"icon": icon, "color": color},
             )
             categories[name] = category
@@ -206,6 +212,7 @@ class Command(BaseCommand):
                 user=user,
                 title=title,
                 expense_date=expense_date,
+                transaction_type=Expense.TransactionType.EXPENSE,
                 defaults={
                     "amount": Decimal(amount),
                     "category": categories[category_name],
@@ -219,11 +226,35 @@ class Command(BaseCommand):
             )
             expenses[title] = expense
 
+    def create_income_and_shared_expenses(self, user, household, categories, people):
+        rows = [
+            ("Monthly salary", "85000.00", "Salary", "bank", date(2026, 7, 1), "July salary credit."),
+            ("Freelance design work", "12500.00", "Freelance", "bank", date(2026, 7, 6), "Client project payment."),
+        ]
+        for title, amount, category_name, method, transaction_date, note in rows:
+            Expense.objects.update_or_create(
+                user=user,
+                title=title,
+                expense_date=transaction_date,
+                transaction_type=Expense.TransactionType.INCOME,
+                defaults={
+                    "amount": Decimal(amount),
+                    "category": categories[category_name],
+                    "payment_method": method,
+                    "created_by": user,
+                    "paid_by_user": user,
+                    "visibility": Expense.Visibility.PRIVATE,
+                    "expense_type": Expense.ExpenseType.PERSONAL,
+                    "note": note,
+                },
+            )
+
         rent, _ = Expense.objects.update_or_create(
             user=user,
             household=household,
             title="Apartment rent",
             expense_date=date(2026, 7, 1),
+            transaction_type=Expense.TransactionType.EXPENSE,
             defaults={
                 "amount": Decimal("30000.00"),
                 "category": categories["Rent"],
@@ -242,6 +273,7 @@ class Command(BaseCommand):
             user=user,
             title="Barbeque Nation dinner",
             expense_date=date(2026, 7, 5),
+            transaction_type=Expense.TransactionType.EXPENSE,
             defaults={
                 "amount": Decimal("4200.00"),
                 "category": categories["Food & Dining"],

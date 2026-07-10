@@ -114,6 +114,10 @@ def create_expense_with_shares(user, validated_data, shares_data=None, split_typ
     _apply_defaults(user, expense_data)
     _validate_household_expense(user, expense_data)
 
+    if expense_data.get("transaction_type") == Expense.TransactionType.INCOME:
+        if expense_data["expense_type"] == Expense.ExpenseType.SHARED or shares_data:
+            raise serializers.ValidationError("Income transactions cannot be split.")
+
     if expense_data["expense_type"] == Expense.ExpenseType.PERSONAL:
         expense_data["visibility"] = Expense.Visibility.PRIVATE
         expense_data["household"] = None
@@ -142,6 +146,8 @@ def create_expense_with_shares(user, validated_data, shares_data=None, split_typ
 def update_expense_shares(user, expense, shares_data, split_type=None):
     if not can_edit_expense(user, expense):
         raise serializers.ValidationError("You do not have access to edit this expense.")
+    if expense.transaction_type == Expense.TransactionType.INCOME:
+        raise serializers.ValidationError("Income transactions cannot have expense shares.")
     resolved_participants = [_resolve_participant(row) for row in shares_data]
     for row in resolved_participants:
         _validate_share_participant(user, expense, row)

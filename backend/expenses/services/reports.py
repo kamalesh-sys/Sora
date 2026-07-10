@@ -6,7 +6,7 @@ from io import BytesIO, StringIO
 from xml.sax.saxutils import escape
 
 from django.utils import timezone
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import landscape, letter
@@ -40,7 +40,7 @@ def parse_month_range(value):
     return start, end
 
 
-def get_monthly_expenses(start, end, user=None):
+def get_monthly_transactions(start, end, user=None):
     queryset = Expense.objects.select_related("category").filter(
         expense_date__range=(start, end)
     )
@@ -49,15 +49,50 @@ def get_monthly_expenses(start, end, user=None):
     return queryset
 
 
+def get_monthly_expenses(start, end, user=None):
+    return get_monthly_transactions(start, end, user=user).filter(
+        transaction_type=Expense.TransactionType.EXPENSE
+    )
+
+
+def get_monthly_income(start, end, user=None):
+    return get_monthly_transactions(start, end, user=user).filter(
+        transaction_type=Expense.TransactionType.INCOME
+    )
+
+
+def get_wallet_balance(user=None):
+    transactions = Expense.objects.all()
+    income = transactions.filter(transaction_type=Expense.TransactionType.INCOME)
+    expenses = transactions.filter(transaction_type=Expense.TransactionType.EXPENSE)
+    if user is not None:
+        income = income.filter(user=user)
+        expenses = expenses.filter(Q(paid_by_user=user) | Q(user=user, paid_by_user__isnull=True))
+    total_income = (
+        income
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0.00")
+    )
+    total_expense = (
+        expenses
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0.00")
+    )
+    return total_income - total_expense
+
+
 def get_monthly_report_data(start, end, user=None):
     expenses = get_monthly_expenses(start, end, user=user)
+    income = get_monthly_income(start, end, user=user)
     budgets = MonthlyBudget.objects.filter(month=start)
     if user is not None:
         budgets = budgets.filter(user=user)
 
     total_expense = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_income = income.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     total_budget = budgets.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     balance = total_budget - total_expense
+    net_cash_flow = total_income - total_expense
 
     category_rows = (
         expenses.values("category_id", "category__name")
@@ -69,12 +104,25 @@ def get_monthly_report_data(start, end, user=None):
         .annotate(total=Sum("amount"), count=Count("id"))
         .order_by("-total", "payment_method")
     )
+    income_category_rows = (
+        income.values("category_id", "category__name")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "category__name")
+    )
+    income_payment_method_rows = (
+        income.values("payment_method")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "payment_method")
+    )
 
     return {
         "month": start.strftime("%Y-%m"),
         "total_expense": money(total_expense),
+        "total_income": money(total_income),
         "total_budget": money(total_budget),
         "balance": money(balance),
+        "net_cash_flow": money(net_cash_flow),
+        "wallet_balance": money(get_wallet_balance(user=user)),
         "category_breakdown": [
             {
                 "category_id": row["category_id"],
@@ -92,19 +140,39 @@ def get_monthly_report_data(start, end, user=None):
             }
             for row in payment_method_rows
         ],
+        "income_category_breakdown": [
+            {
+                "category_id": row["category_id"],
+                "category_name": row["category__name"] or "Uncategorized",
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in income_category_rows
+        ],
+        "income_payment_method_breakdown": [
+            {
+                "payment_method": row["payment_method"],
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in income_payment_method_rows
+        ],
         "expense_count": expenses.count(),
+        "income_count": income.count(),
+        "transaction_count": expenses.count() + income.count(),
     }
 
 
 def build_expenses_csv(expenses):
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Date", "Title", "Category", "Payment Method", "Amount", "Note"])
+    writer.writerow(["Date", "Type", "Title", "Category", "Payment Method", "Amount", "Note"])
 
     for expense in expenses:
         writer.writerow(
             [
                 expense.expense_date.isoformat(),
+                expense.get_transaction_type_display(),
                 expense.title,
                 expense.category.name if expense.category else "Uncategorized",
                 expense.get_payment_method_display(),
@@ -136,7 +204,7 @@ def build_monthly_report_pdf(report_data, expenses):
         Table(
             [
                 [
-                    Paragraph("Sora Expense Report", styles["ReportTitle"]),
+                    Paragraph("Sora Transaction Report", styles["ReportTitle"]),
                     Paragraph(
                         f"Month: {report_data['month']}<br/>Generated: {generated_at}",
                         styles["ReportMeta"],
@@ -160,15 +228,16 @@ def build_monthly_report_pdf(report_data, expenses):
     story.append(
         _table(
             [
-                ["Total Expense", "Total Budget", balance_label, "Expense Count"],
+                ["Income", "Expense", "Net Cash Flow", "Wallet Balance", "Transactions"],
                 [
+                    display_money(report_data["total_income"]),
                     display_money(report_data["total_expense"]),
-                    display_money(report_data["total_budget"]),
-                    display_money(abs(balance)),
-                    str(report_data["expense_count"]),
+                    display_money(report_data["net_cash_flow"]),
+                    display_money(report_data["wallet_balance"]),
+                    str(report_data["transaction_count"]),
                 ],
             ],
-            [2.45 * inch, 2.45 * inch, 2.45 * inch, 2.45 * inch],
+            [1.96 * inch, 1.96 * inch, 1.96 * inch, 1.96 * inch, 1.96 * inch],
             styles,
             kind="summary",
         )
@@ -219,11 +288,12 @@ def build_monthly_report_pdf(report_data, expenses):
     )
     story.append(Spacer(1, 0.2 * inch))
 
-    story.append(Paragraph("Expense Table", styles["SectionTitle"]))
-    expense_rows = [["Date", "Title", "Category", "Payment Method", "Amount", "Note"]]
+    story.append(Paragraph("Transaction Table", styles["SectionTitle"]))
+    expense_rows = [["Date", "Type", "Title", "Category", "Method", "Amount", "Note"]]
     expense_rows.extend(
         [
             expense.expense_date.isoformat(),
+            expense.get_transaction_type_display(),
             expense.title,
             expense.category.name if expense.category else "Uncategorized",
             expense.get_payment_method_display(),
@@ -233,13 +303,13 @@ def build_monthly_report_pdf(report_data, expenses):
         for expense in expenses
     )
     if len(expense_rows) == 1:
-        expense_rows.append(["No expenses found", "", "", "", display_money("0.00"), ""])
+        expense_rows.append(["No transactions found", "", "", "", "", display_money("0.00"), ""])
     story.append(
         _table(
             expense_rows,
-            [0.9 * inch, 1.7 * inch, 1.4 * inch, 1.25 * inch, 1.1 * inch, 3.45 * inch],
+            [0.8 * inch, 0.7 * inch, 1.45 * inch, 1.25 * inch, 1.0 * inch, 1.05 * inch, 3.55 * inch],
             styles,
-            numeric_columns={4},
+            numeric_columns={5},
         )
     )
 

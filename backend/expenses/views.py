@@ -41,6 +41,8 @@ from .serializers import (
     HouseholdMemberSerializer,
     HouseholdSerializer,
     MonthlyBudgetSerializer,
+    CreatePeopleInvitationSerializer,
+    PeopleInvitationSerializer,
     PersonSerializer,
     RecurringBillSerializer,
     SettlementSerializer,
@@ -65,8 +67,8 @@ from .services.recurring_bills import get_bill_calendar, mark_occurrence_paid, m
 from .services.reports import (
     build_expenses_csv,
     build_monthly_report_pdf,
-    get_monthly_expenses,
     get_monthly_report_data,
+    get_monthly_transactions,
     parse_month_range,
 )
 from .services.settlements import cancel_settlement, get_household_balances, get_person_ledger
@@ -129,14 +131,28 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseCategorySerializer
 
     def get_queryset(self):
-        return ExpenseCategory.objects.filter(user=self.request.user).order_by("name")
+        queryset = ExpenseCategory.objects.filter(user=self.request.user)
+        transaction_type = (
+            self.request.query_params.get("transaction_type")
+            or ExpenseCategory.TransactionType.EXPENSE
+        )
+        if transaction_type not in ExpenseCategory.TransactionType.values:
+            raise ValidationError({"transaction_type": "Invalid transaction type."})
+        queryset = queryset.filter(transaction_type=transaction_type)
+        return queryset.order_by("transaction_type", "name")
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
     @action(detail=False, methods=["post"], url_path="seed-defaults")
     def seed_defaults(self, request):
-        categories = seed_default_categories(request.user)
+        transaction_type = request.data.get("transaction_type") or request.query_params.get("transaction_type")
+        if transaction_type and transaction_type not in ExpenseCategory.TransactionType.values:
+            raise ValidationError({"transaction_type": "Invalid transaction type."})
+        categories = seed_default_categories(
+            request.user,
+            transaction_type=transaction_type or ExpenseCategory.TransactionType.EXPENSE,
+        )
         serializer = self.get_serializer(categories, many=True)
         return Response(serializer.data)
 
@@ -146,6 +162,16 @@ class PersonViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Person.objects.filter(owner=self.request.user).order_by("name", "id")
+
+    @action(detail=False, methods=["post"], url_path="invite")
+    def invite(self, request):
+        serializer = CreatePeopleInvitationSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        invitation = serializer.save()
+        return Response(
+            PeopleInvitationSerializer(invitation, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["get"], url_path="overview")
     def overview(self, request):
@@ -302,6 +328,10 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         queryset = visible_expenses_for_user(self.request.user).order_by("-expense_date", "-created_at")
         params = self.request.query_params
 
+        # The legacy endpoint remains expense-only unless a type is requested.
+        if self.basename == "expense" and not params.get("transaction_type"):
+            queryset = queryset.filter(transaction_type=Expense.TransactionType.EXPENSE)
+
         if month := params.get("month"):
             try:
                 start, end = parse_month_range(month)
@@ -335,6 +365,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             if expense_type not in Expense.ExpenseType.values:
                 raise ValidationError({"expense_type": "Invalid expense type."})
             queryset = queryset.filter(expense_type=expense_type)
+
+        if transaction_type := params.get("transaction_type"):
+            if transaction_type not in Expense.TransactionType.values:
+                raise ValidationError({"transaction_type": "Invalid transaction type."})
+            queryset = queryset.filter(transaction_type=transaction_type)
 
         if start_date := params.get("start_date"):
             queryset = queryset.filter(expense_date__gte=_parse_query_date(start_date, "start_date"))
@@ -586,6 +621,7 @@ class GoalViewSet(viewsets.ModelViewSet):
                 savings_category = ExpenseCategory.objects.filter(
                     user=request.user,
                     name__iexact="Savings",
+                    transaction_type=ExpenseCategory.TransactionType.EXPENSE,
                 ).first()
                 expense = Expense.objects.create(
                     user=request.user,
@@ -593,6 +629,7 @@ class GoalViewSet(viewsets.ModelViewSet):
                     paid_by_user=request.user,
                     title=f"{locked_goal.name} contribution",
                     amount=contribution.amount,
+                    transaction_type=Expense.TransactionType.EXPENSE,
                     category=savings_category,
                     expense_date=contribution.contribution_date,
                     payment_method=Expense.PaymentMethod.UPI,
@@ -757,14 +794,24 @@ def dashboard_summary(request):
         previous_start.month,
         parse_month_range(previous_start.strftime("%Y-%m"))[1].day,
     )
-    recent_expenses = visible_expenses_for_user(request.user).filter(
+    recent_transactions = visible_expenses_for_user(request.user).filter(
         expense_date__range=(start, end)
+    ).order_by("-expense_date", "-created_at")[:limit]
+    serialized_transactions = ExpenseSerializer(
+        recent_transactions,
+        many=True,
+        context={"request": request},
+    ).data
+    recent_expenses = visible_expenses_for_user(request.user).filter(
+        expense_date__range=(start, end),
+        transaction_type=Expense.TransactionType.EXPENSE,
     ).order_by("-expense_date", "-created_at")[:limit]
 
     return Response(
         {
             "summary": get_monthly_report_data(start, end, user=request.user),
             "previous_summary": get_monthly_report_data(previous_start, previous_end, user=request.user),
+            "recent_transactions": serialized_transactions,
             "recent_expenses": ExpenseSerializer(
                 recent_expenses,
                 many=True,
@@ -781,9 +828,9 @@ def export_csv(request):
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    csv_content = build_expenses_csv(get_monthly_expenses(start, end, user=request.user))
+    csv_content = build_expenses_csv(get_monthly_transactions(start, end, user=request.user))
     response = HttpResponse(csv_content, content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="sora-expenses-{start:%Y-%m}.csv"'
+    response["Content-Disposition"] = f'attachment; filename="sora-transactions-{start:%Y-%m}.csv"'
     return response
 
 
@@ -794,9 +841,9 @@ def export_pdf(request):
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    expenses = list(get_monthly_expenses(start, end, user=request.user))
+    expenses = list(get_monthly_transactions(start, end, user=request.user))
     report_data = get_monthly_report_data(start, end, user=request.user)
     pdf_content = build_monthly_report_pdf(report_data, expenses)
     response = HttpResponse(pdf_content, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="sora-expense-report-{start:%Y-%m}.pdf"'
+    response["Content-Disposition"] = f'attachment; filename="sora-transaction-report-{start:%Y-%m}.pdf"'
     return response
