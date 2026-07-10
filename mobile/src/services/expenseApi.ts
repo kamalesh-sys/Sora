@@ -7,6 +7,13 @@ import {
   DashboardSummary,
   Expense,
   ExpenseCategory,
+  AddGoalContributionPayload,
+  AddGoalContributionResult,
+  Goal,
+  GoalMutationResult,
+  GoalTemplate,
+  SaveGoalPayload,
+  SkipGoalResult,
   MonthlyBudget,
   MonthlySummary,
   PaymentMethod,
@@ -239,6 +246,67 @@ export async function markBillPaid(
 
 export async function skipBillOccurrence(id: number) {
   const response = await client.post<BillOccurrence>(`/bill-occurrences/${id}/skip/`);
+  return response.data;
+}
+
+export async function getGoals() {
+  const response = await cachedGet<Goal[] | { results: Goal[] }>("/goals/");
+  return unpackList(response.data);
+}
+
+export async function getGoal(id: number) {
+  const response = await cachedGet<Goal>(`/goals/${id}/`);
+  return response.data;
+}
+
+export async function getGoalTemplates() {
+  const response = await cachedGet<GoalTemplate[]>("/goals/templates/", undefined, 5 * 60 * 1000);
+  return response.data;
+}
+
+export async function createGoal(payload: SaveGoalPayload) {
+  const response = await client.post<Goal>("/goals/", payload);
+  return response.data;
+}
+
+export async function updateGoal(id: number, payload: SaveGoalPayload) {
+  const response = await client.patch<Goal>(`/goals/${id}/`, payload);
+  return response.data;
+}
+
+export async function deleteGoal(id: number) {
+  await client.delete(`/goals/${id}/`);
+}
+
+export async function addGoalContribution(id: number, payload: AddGoalContributionPayload) {
+  const response = await client.post<AddGoalContributionResult>(`/goals/${id}/contributions/`, payload);
+  return response.data;
+}
+
+export async function updateGoalContribution(
+  goalId: number,
+  contributionId: number,
+  payload: Partial<AddGoalContributionPayload>
+) {
+  const response = await client.patch<AddGoalContributionResult>(
+    `/goals/${goalId}/contributions/${contributionId}/`,
+    payload
+  );
+  return response.data;
+}
+
+export async function deleteGoalContribution(goalId: number, contributionId: number) {
+  const response = await client.delete<GoalMutationResult>(`/goals/${goalId}/contributions/${contributionId}/`);
+  return response.data;
+}
+
+export async function skipGoalMonth(id: number, month: string) {
+  const response = await client.post<SkipGoalResult>(`/goals/${id}/skip/`, { month });
+  return response.data;
+}
+
+export async function undoGoalMonthSkip(goalId: number, skipId: number) {
+  const response = await client.delete<GoalMutationResult>(`/goals/${goalId}/skips/${skipId}/`);
   return response.data;
 }
 

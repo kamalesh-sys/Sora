@@ -17,7 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { StartupLoadingScreen } from "./src/components/StartupLoadingScreen";
 import { AppSettingsProvider, useAppSettings } from "./src/context/AppSettingsContext";
-import { AuthProvider } from "./src/context/AuthContext";
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { FeedbackProvider } from "./src/context/FeedbackContext";
 import { AppErrorBoundary } from "./src/components/AppErrorBoundary";
 import { RootNavigator } from "./src/navigation/RootNavigator";
@@ -30,6 +30,11 @@ const linking: LinkingOptions<RootStackParamList> = {
       Categories: "categories",
       ExpenseForm: "add-expense",
       Expenses: "expenses",
+      GoalDetail: {
+        path: "goals/:goalId",
+        parse: { goalId: Number },
+      },
+      Goals: "goals",
       Home: "home",
       People: "people",
       Profile: "profile",
@@ -53,7 +58,7 @@ export default function App() {
 }
 
 function AppShell() {
-  const { paperTheme, themeMode } = useAppSettings();
+  const { paperTheme, settingsReady, themeMode } = useAppSettings();
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -90,24 +95,53 @@ function AppShell() {
     syncAndroidNavigationBar();
   }, [syncAndroidNavigationBar]);
 
-  if (!fontsLoaded) {
-    return <StartupLoadingScreen />;
-  }
-
   return (
     <PaperProvider theme={paperTheme}>
       <FeedbackProvider>
         <AuthProvider>
-          <NavigationContainer
-            linking={linking}
-            onReady={syncAndroidNavigationBar}
-            onStateChange={syncAndroidNavigationBar}
-          >
-            <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
-            <RootNavigator />
-          </NavigationContainer>
+          <BootGate
+            fontsLoaded={fontsLoaded}
+            settingsReady={settingsReady}
+            syncAndroidNavigationBar={syncAndroidNavigationBar}
+            themeMode={themeMode}
+          />
         </AuthProvider>
       </FeedbackProvider>
     </PaperProvider>
+  );
+}
+
+function BootGate({
+  fontsLoaded,
+  settingsReady,
+  syncAndroidNavigationBar,
+  themeMode,
+}: {
+  fontsLoaded: boolean;
+  settingsReady: boolean;
+  syncAndroidNavigationBar: () => void;
+  themeMode: "light" | "dark";
+}) {
+  const { initializing } = useAuth();
+  const statusBarStyle = themeMode === "dark" ? "light" : "dark";
+
+  if (!fontsLoaded || !settingsReady || initializing) {
+    return (
+      <>
+        <StatusBar style={statusBarStyle} />
+        <StartupLoadingScreen />
+      </>
+    );
+  }
+
+  return (
+    <NavigationContainer
+      linking={linking}
+      onReady={syncAndroidNavigationBar}
+      onStateChange={syncAndroidNavigationBar}
+    >
+      <StatusBar style={statusBarStyle} />
+      <RootNavigator />
+    </NavigationContainer>
   );
 }

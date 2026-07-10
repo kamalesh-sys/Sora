@@ -22,13 +22,14 @@ import {
   useDs,
 } from "../design-system";
 import { useAuth } from "../context/AuthContext";
+import { Translate, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { getCategories, getExpenses } from "../services/expenseApi";
 import { exportMonthlyReport, ReportExportType } from "../services/reportExport";
 import { getCategoryVisual } from "../theme/soraTheme";
 import type { Expense, ExpenseCategory, PaymentMethod } from "../types/api";
 import { getCurrentMonth, isValidMonth } from "../utils/date";
-import { formatCurrencyCompact, formatDateLabel, formatPaymentMethod, parseAmount } from "../utils/format";
+import { formatCurrencyCompact, formatDateLabel, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Expenses">;
 type PaymentFilter = "all" | PaymentMethod;
@@ -53,6 +54,7 @@ const orderingOptions: Array<{ label: string; value: OrderingFilter }> = [
 export function ExpensesScreen({ navigation }: Props) {
   const { colors } = useDs();
   const { token } = useAuth();
+  const { t } = useI18n();
   const [month, setMonth] = useState(getCurrentMonth());
   const [exportMonth, setExportMonth] = useState(getCurrentMonth());
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
@@ -70,7 +72,7 @@ export function ExpensesScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     const cleanMonth = month.trim();
     if (cleanMonth && !isValidMonth(cleanMonth)) {
-      setError("Month must use YYYY-MM format.");
+      setError(t("Month must use YYYY-MM format."));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -90,12 +92,12 @@ export function ExpensesScreen({ navigation }: Props) {
       setExpenses(expenseRows);
       setCategories(categoryRows);
     } catch {
-      setError("Could not load expenses. Pull to retry.");
+      setError(t("Could not load expenses. Pull to retry."));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [categoryFilter, month, ordering, paymentFilter]);
+  }, [categoryFilter, month, ordering, paymentFilter, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,7 +107,7 @@ export function ExpensesScreen({ navigation }: Props) {
   );
 
   const total = useMemo(() => expenses.reduce((sum, expense) => sum + parseAmount(expense.amount), 0), [expenses]);
-  const groupedExpenses = useMemo(() => groupExpensesByDate(expenses), [expenses]);
+  const groupedExpenses = useMemo(() => groupExpensesByDate(expenses, t), [expenses, t]);
 
   const refresh = () => {
     setRefreshing(true);
@@ -121,11 +123,11 @@ export function ExpensesScreen({ navigation }: Props) {
 
   const exportReport = async (type: ReportExportType) => {
     if (!token) {
-      setError("You must be logged in to export reports.");
+      setError(t("You must be logged in to export reports."));
       return;
     }
     if (!isValidMonth(exportMonth)) {
-      setError("Export month must use YYYY-MM format.");
+      setError(t("Export month must use YYYY-MM format."));
       return;
     }
 
@@ -135,7 +137,7 @@ export function ExpensesScreen({ navigation }: Props) {
       await exportMonthlyReport({ month: exportMonth, token, type });
       setShowExport(false);
     } catch {
-      setError(`Could not export ${type.toUpperCase()} report.`);
+      setError(t("Could not export {type} report.", { type: type.toUpperCase() }));
     } finally {
       setExporting(null);
     }
@@ -145,12 +147,12 @@ export function ExpensesScreen({ navigation }: Props) {
     <AppScreen bottomNavCurrent="Expenses" onRefresh={refresh} refreshing={refreshing}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <AppText variant="title">Expenses</AppText>
+          <AppText variant="title">{t("Expenses")}</AppText>
           <AppText color="textSubtle" variant="caption">
-            {expenses.length} {expenses.length === 1 ? "expense" : "expenses"} | {formatCurrencyCompact(total)}
+            {t(expenses.length === 1 ? "{count} expense" : "{count} expenses", { count: expenses.length })} | {formatCurrencyCompact(total)}
           </AppText>
         </View>
-        <IconButton accessibilityLabel="Export expenses" icon={showExport ? "close" : "file-export-outline"} onPress={() => {
+        <IconButton accessibilityLabel={t("Export expenses")} icon={showExport ? "close" : "file-export-outline"} onPress={() => {
           setExportMonth(month || getCurrentMonth());
           setShowExport((current) => !current);
         }} />
@@ -160,18 +162,18 @@ export function ExpensesScreen({ navigation }: Props) {
 
       <AppCard style={[styles.summaryCard, { backgroundColor: colors.accent, borderColor: colors.accent }]}>
         <View>
-          <AppText style={styles.inverseMuted} variant="label">{month || "All months"}</AppText>
+          <AppText style={styles.inverseMuted} variant="label">{month || t("All months")}</AppText>
           <AppText style={styles.inverseAmount} variant="display">{formatCurrencyCompact(total)}</AppText>
         </View>
         <AppButton icon="filter-variant" onPress={() => setShowFilters((current) => !current)} variant="secondary">
-          Filters
+          {t("Filters")}
         </AppButton>
       </AppCard>
 
       {showExport ? (
         <AppCard>
-          <SectionHeader title="Export" />
-          <FormField autoCapitalize="none" label="Month" onChangeText={setExportMonth} placeholder="YYYY-MM" value={exportMonth} />
+          <SectionHeader title={t("Export")} />
+          <FormField autoCapitalize="none" label={t("Month")} onChangeText={setExportMonth} placeholder="YYYY-MM" value={exportMonth} />
           <View style={styles.actionRow}>
             <AppButton loading={exporting === "pdf"} onPress={() => exportReport("pdf")} variant="secondary">PDF</AppButton>
             <AppButton loading={exporting === "csv"} onPress={() => exportReport("csv")} variant="secondary">CSV</AppButton>
@@ -190,7 +192,7 @@ export function ExpensesScreen({ navigation }: Props) {
                 const visual = getCategoryVisual(expense.category_detail?.name, expense.category_detail?.icon, expense.category_detail?.color);
                 const showDate = !["today", "yesterday"].includes(getDateGroupKey(expense.expense_date));
                 const meta = [
-                  expense.category_detail?.name ?? "Uncategorized",
+                  expense.category_detail?.name ?? t("Uncategorized"),
                   formatPaymentMethod(expense.payment_method),
                   showDate ? formatDateLabel(expense.expense_date) : null,
                 ].filter(Boolean).join(" | ");
@@ -202,7 +204,7 @@ export function ExpensesScreen({ navigation }: Props) {
                     iconColor={visual.color}
                     key={expense.id}
                     onPress={() => navigation.navigate("ExpenseForm", { expenseId: expense.id })}
-                    rightLabel={expense.expense_type === "shared" ? "Shared" : undefined}
+                    rightLabel={expense.expense_type === "shared" ? t("Shared") : undefined}
                     title={expense.title}
                   />
                 );
@@ -212,11 +214,11 @@ export function ExpensesScreen({ navigation }: Props) {
         ))
       ) : (
         <EmptyState
-          action="Add expense"
-          body="Use the plus button and your expenses will be grouped here by date."
+          action={t("Add expense")}
+          body={t("Use the plus button and your expenses will be grouped here by date.")}
           icon="receipt-text-plus-outline"
           onAction={() => navigation.navigate("ExpenseForm")}
-          title="No expenses found"
+          title={t("No expenses found")}
         />
       )}
 
@@ -265,38 +267,39 @@ function ExpenseFilterSheet({
   paymentFilter: PaymentFilter;
   visible: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <AppBottomSheet
-      footer={<AppButton block onPress={onClose}>Apply filters</AppButton>}
+      footer={<AppButton block onPress={onClose}>{t("Apply filters")}</AppButton>}
       onClose={onClose}
-      title="Filters"
+      title={t("Filters")}
       visible={visible}
     >
-      <FormField autoCapitalize="none" label="Month" onChangeText={onMonthChange} placeholder="YYYY-MM" value={month} />
+      <FormField autoCapitalize="none" label={t("Month")} onChangeText={onMonthChange} placeholder="YYYY-MM" value={month} />
 
-      <AppText color="textMuted" style={styles.filterLabel} variant="label">Payment</AppText>
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Payment")}</AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {paymentOptions.map((option) => (
           <CategoryChip
             active={paymentFilter === option.value}
             icon={option.icon}
             key={option.value}
-            label={option.label}
+            label={t(option.label)}
             onPress={() => onPaymentChange(option.value)}
           />
         ))}
       </ScrollView>
 
-      <AppText color="textMuted" style={styles.filterLabel} variant="label">Sort</AppText>
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Sort")}</AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {orderingOptions.map((option) => (
-          <CategoryChip active={ordering === option.value} key={option.value} label={option.label} onPress={() => onOrderingChange(option.value)} />
+          <CategoryChip active={ordering === option.value} key={option.value} label={t(option.label)} onPress={() => onOrderingChange(option.value)} />
         ))}
       </ScrollView>
 
-      <AppText color="textMuted" style={styles.filterLabel} variant="label">Category</AppText>
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Category")}</AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-        <CategoryChip active={categoryFilter === null} label="All" onPress={() => onCategoryChange(null)} />
+        <CategoryChip active={categoryFilter === null} label={t("All")} onPress={() => onCategoryChange(null)} />
         {categories.map((item) => {
           const visual = getCategoryVisual(item.name, item.icon, item.color);
           return (
@@ -312,13 +315,13 @@ function ExpenseFilterSheet({
       </ScrollView>
 
       <AppButton compact icon="filter-remove-outline" onPress={clearFilters} style={styles.resetButton} variant="secondary">
-        Reset filters
+        {t("Reset filters")}
       </AppButton>
     </AppBottomSheet>
   );
 }
 
-function groupExpensesByDate(rows: Expense[]): ExpenseSection[] {
+function groupExpensesByDate(rows: Expense[], t: Translate): ExpenseSection[] {
   const sections: ExpenseSection[] = [];
   const sectionByKey = new Map<string, ExpenseSection>();
 
@@ -329,7 +332,7 @@ function groupExpensesByDate(rows: Expense[]): ExpenseSection[] {
       existing.data.push(expense);
       return;
     }
-    const next = { data: [expense], key, title: getDateGroupTitle(expense.expense_date) };
+    const next = { data: [expense], key, title: getDateGroupTitle(expense.expense_date, t) };
     sections.push(next);
     sectionByKey.set(key, next);
   });
@@ -346,13 +349,13 @@ function getDateGroupKey(value: string) {
   return value.slice(0, 7);
 }
 
-function getDateGroupTitle(value: string) {
+function getDateGroupTitle(value: string, t: Translate) {
   const days = getDaysFromToday(value);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days >= 2 && days <= 6) return "This Week";
-  if (days >= 7 && days <= 13) return "Last Week";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  if (days === 0) return t("Today");
+  if (days === 1) return t("Yesterday");
+  if (days >= 2 && days <= 6) return t("This Week");
+  if (days >= 7 && days <= 13) return t("Last Week");
+  return formatMonthLabel(value.slice(0, 7));
 }
 
 function getDaysFromToday(value: string) {

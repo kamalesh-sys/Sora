@@ -24,6 +24,7 @@ import {
   useDs,
 } from "../design-system";
 import { useAppSettings } from "../context/AppSettingsContext";
+import { Translate, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
   createBudget,
@@ -41,7 +42,7 @@ import {
 import { getCategoryVisual } from "../theme/soraTheme";
 import type { BillOccurrence, ExpenseCategory, MonthlyBudget, MonthlySummary, PaymentMethod, RecurringBill } from "../types/api";
 import { getCurrentMonth, getTodayDate, isValidDate, isValidMonth } from "../utils/date";
-import { formatCurrencyCompact, formatDateLabel, formatMonthLabel, parseAmount } from "../utils/format";
+import { formatCurrencyCompact, formatDateLabel, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Bills">;
 type Tab = "upcoming" | "recurring" | "history";
@@ -72,15 +73,15 @@ function getOccurrenceStatus(occurrence: BillOccurrence): BillOccurrence["status
   return occurrence.status;
 }
 
-function getDueText(occurrence: BillOccurrence) {
+function getDueText(occurrence: BillOccurrence, t: Translate) {
   const status = getOccurrenceStatus(occurrence);
-  if (status === "paid") return occurrence.paid_at ? `Paid ${formatDateLabel(occurrence.paid_at.slice(0, 10))}` : "Paid";
-  if (status === "skipped") return "Skipped";
+  if (status === "paid") return occurrence.paid_at ? t("Paid {date}", { date: formatDateLabel(occurrence.paid_at.slice(0, 10)) }) : t("Paid");
+  if (status === "skipped") return t("Skipped");
   const days = daysUntil(occurrence.due_date);
-  if (days < 0) return `Overdue by ${Math.abs(days)} ${Math.abs(days) === 1 ? "day" : "days"}`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  if (days <= 7) return `In ${days} days`;
+  if (days < 0) return t(Math.abs(days) === 1 ? "Overdue by {count} day" : "Overdue by {count} days", { count: Math.abs(days) });
+  if (days === 0) return t("Due today");
+  if (days === 1) return t("Due tomorrow");
+  if (days <= 7) return t("In {count} days", { count: days });
   return formatDateLabel(occurrence.due_date);
 }
 
@@ -98,6 +99,7 @@ function sanitizeAmount(value: string) {
 export function BillsScreen({}: Props) {
   const { colors } = useDs();
   const { themeMode } = useAppSettings();
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("upcoming");
   const [month, setMonth] = useState(getCurrentMonth());
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -125,7 +127,7 @@ export function BillsScreen({}: Props) {
 
   const load = useCallback(async () => {
     if (!isValidMonth(month)) {
-      setError("Month must use YYYY-MM format.");
+      setError(t("Month must use YYYY-MM format."));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -150,12 +152,12 @@ export function BillsScreen({}: Props) {
       setBudgetNote(budget?.note ?? "");
       if (!billCategory && categoryRows[0]) setBillCategory(categoryRows[0].id);
     } catch {
-      setError("Could not load bills and budget. Pull to retry.");
+      setError(t("Could not load bills and budget. Pull to retry."));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [billCategory, month]);
+  }, [billCategory, month, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -195,6 +197,7 @@ export function BillsScreen({}: Props) {
   const heroTextColor = "#FFFFFF";
   const heroMutedColor = "rgba(255,255,255,0.72)";
   const heroIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
+  const localizedTabs = useMemo(() => tabs.map((item) => ({ ...item, label: t(item.label) })), [t]);
 
   const resetBillForm = useCallback(() => {
     setEditingBill(null);
@@ -233,7 +236,7 @@ export function BillsScreen({}: Props) {
   const saveBill = async () => {
     const amount = Number(billAmount);
     if (!billName.trim() || !Number.isFinite(amount) || amount <= 0 || !isValidDate(billDate)) {
-      setError("Enter bill name, amount and due date.");
+      setError(t("Enter bill name, amount and due date."));
       return;
     }
     setSaving(true);
@@ -258,17 +261,17 @@ export function BillsScreen({}: Props) {
       setTab("recurring");
       await load();
     } catch {
-      setError(editingBill ? "Could not update recurring bill." : "Could not create recurring bill.");
+      setError(t(editingBill ? "Could not update recurring bill." : "Could not create recurring bill."));
     } finally {
       setSaving(false);
     }
   };
 
   const confirmDeleteRecurring = (bill: RecurringBill) => {
-    Alert.alert("Remove recurring bill", `${bill.name} will be removed from recurring payments.`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Remove recurring bill"), t("{name} will be removed from recurring payments.", { name: bill.name }), [
+      { text: t("Cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("Remove"),
         style: "destructive",
         onPress: async () => {
           setSaving(true);
@@ -284,7 +287,7 @@ export function BillsScreen({}: Props) {
             }
             await load();
           } catch {
-            setError("Could not remove recurring bill.");
+            setError(t("Could not remove recurring bill."));
           } finally {
             setSaving(false);
           }
@@ -296,11 +299,11 @@ export function BillsScreen({}: Props) {
   const saveBudget = async () => {
     const amount = Number(budgetAmount);
     if (!isValidMonth(month)) {
-      setError("Month must use YYYY-MM format.");
+      setError(t("Month must use YYYY-MM format."));
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Budget amount must be greater than 0.");
+      setError(t("Budget amount must be greater than 0."));
       return;
     }
 
@@ -320,17 +323,17 @@ export function BillsScreen({}: Props) {
       setShowBudgetForm(false);
       await load();
     } catch {
-      setError("Could not save budget.");
+      setError(t("Could not save budget."));
     } finally {
       setBudgetSaving(false);
     }
   };
 
   const confirmMarkPaid = (occurrence: BillOccurrence) => {
-    Alert.alert("Mark bill paid", `Create an expense for ${formatCurrencyCompact(occurrence.amount)}?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Mark bill paid"), t("Create an expense for {amount}?", { amount: formatCurrencyCompact(occurrence.amount) }), [
+      { text: t("Cancel"), style: "cancel" },
       {
-        text: "Mark paid",
+        text: t("Mark paid"),
         onPress: async () => {
           setSaving(true);
           setError("");
@@ -338,7 +341,7 @@ export function BillsScreen({}: Props) {
             await markBillPaid(occurrence.id, true);
             await load();
           } catch {
-            setError("Could not mark bill paid.");
+            setError(t("Could not mark bill paid."));
           } finally {
             setSaving(false);
           }
@@ -348,10 +351,10 @@ export function BillsScreen({}: Props) {
   };
 
   const confirmSkip = (occurrence: BillOccurrence) => {
-    Alert.alert("Skip bill", "This occurrence will be skipped.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Skip bill"), t("This occurrence will be skipped."), [
+      { text: t("Cancel"), style: "cancel" },
       {
-        text: "Skip",
+        text: t("Skip"),
         style: "destructive",
         onPress: async () => {
           setSaving(true);
@@ -360,7 +363,7 @@ export function BillsScreen({}: Props) {
             await skipBillOccurrence(occurrence.id);
             await load();
           } catch {
-            setError("Could not skip bill.");
+            setError(t("Could not skip bill."));
           } finally {
             setSaving(false);
           }
@@ -373,9 +376,9 @@ export function BillsScreen({}: Props) {
     <AppScreen bottomNavCurrent="Budget" onRefresh={refresh} refreshing={refreshing}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <AppText variant="title">Bills & Budget</AppText>
+          <AppText variant="title">{t("Bills & Budget")}</AppText>
         </View>
-        <IconButton accessibilityLabel="Add recurring bill" icon="plus" onPress={openAddBill} tone="primary" />
+        <IconButton accessibilityLabel={t("Add recurring bill")} icon="plus" onPress={openAddBill} tone="primary" />
       </View>
 
       <ErrorState text={error} />
@@ -388,7 +391,7 @@ export function BillsScreen({}: Props) {
             <View style={styles.heroTop}>
               <View>
                 <AppText style={{ color: heroMutedColor }} variant="caption">
-                  Upcoming load
+                  {t("Upcoming load")}
                 </AppText>
                 <AppText style={{ color: heroTextColor }} variant="display">
                   {formatCurrencyCompact(upcomingTotal)}
@@ -399,14 +402,17 @@ export function BillsScreen({}: Props) {
               </View>
             </View>
             <AppText style={{ color: heroMutedColor }} variant="body">
-              {activeBills.length} active recurring bills for {formatMonthLabel(month)}
+              {t(activeBills.length === 1 ? "{count} active recurring bill for {month}" : "{count} active recurring bills for {month}", {
+                count: activeBills.length,
+                month: formatMonthLabel(month),
+              })}
             </AppText>
           </AppCard>
 
           <View style={styles.metricGrid}>
-            <MetricTile label="Recurring" value={formatCurrencyCompact(recurringTotal)} />
-            <MetricTile label="Spent" value={formatCurrencyCompact(spent)} />
-            <MetricTile label="Remaining" tone={remaining < 0 ? "danger" : "success"} value={budget > 0 ? formatCurrencyCompact(remaining) : "No budget"} />
+            <MetricTile label={t("Recurring")} value={formatCurrencyCompact(recurringTotal)} />
+            <MetricTile label={t("Spent")} value={formatCurrencyCompact(spent)} />
+            <MetricTile label={t("Remaining")} tone={remaining < 0 ? "danger" : "success"} value={budget > 0 ? formatCurrencyCompact(remaining) : t("No budget")} />
           </View>
 
           <BudgetCard
@@ -426,14 +432,14 @@ export function BillsScreen({}: Props) {
 
           <AppCard>
             <View style={styles.monthRow}>
-              <FormField autoCapitalize="none" label="Month" onChangeText={setMonth} placeholder="YYYY-MM" style={styles.monthInput} value={month} />
+              <FormField autoCapitalize="none" label={t("Month")} onChangeText={setMonth} placeholder="YYYY-MM" style={styles.monthInput} value={month} />
               <AppButton compact icon="refresh" onPress={load} style={styles.monthLoadButton} variant="secondary">
-                Load
+                {t("Load")}
               </AppButton>
             </View>
           </AppCard>
 
-          <AppSegmentedControl accessibilityLabel="Bill view" items={tabs} onChange={setTab} style={styles.segmented} value={tab} />
+          <AppSegmentedControl accessibilityLabel={t("Bill view")} items={localizedTabs} onChange={setTab} style={styles.segmented} value={tab} />
 
           {tab === "recurring" ? (
             activeBills.length ? (
@@ -441,7 +447,7 @@ export function BillsScreen({}: Props) {
                 {activeBills.map((bill) => <RecurringBillRow bill={bill} key={bill.id} onPress={() => openEditBill(bill)} />)}
               </AppCard>
             ) : (
-              <EmptyState action="Add bill" body="Rent, electricity, subscriptions and other recurring payments can be tracked here." icon="calendar-refresh-outline" onAction={openAddBill} title="No recurring bills" />
+              <EmptyState action={t("Add bill")} body={t("Rent, electricity, subscriptions and other recurring payments can be tracked here.")} icon="calendar-refresh-outline" onAction={openAddBill} title={t("No recurring bills")} />
             )
           ) : rows.length ? (
             <AppCard style={styles.listCard}>
@@ -457,11 +463,11 @@ export function BillsScreen({}: Props) {
             </AppCard>
           ) : (
             <EmptyState
-              action="Add recurring bill"
-              body={tab === "history" ? "Paid and skipped bills will appear here." : "Your next recurring bill will appear here when it is due."}
+              action={t("Add recurring bill")}
+              body={t(tab === "history" ? "Paid and skipped bills will appear here." : "Your next recurring bill will appear here when it is due.")}
               icon="calendar-check-outline"
               onAction={openAddBill}
-              title={tab === "history" ? "No bill history" : "No upcoming bills"}
+              title={t(tab === "history" ? "No bill history" : "No upcoming bills")}
             />
           )}
         </>
@@ -579,19 +585,20 @@ function BudgetCard({
   spent: number;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const hasBudget = budget > 0;
   const tone = remaining < 0 ? colors.danger : colors.success;
   return (
     <AppCard>
       <View style={styles.cardHeader}>
         <View>
-          <AppText variant="headline">Monthly budget</AppText>
+          <AppText variant="headline">{t("Monthly budget")}</AppText>
           <AppText color="textSubtle" variant="caption">
-            {hasBudget ? `${budgetUsed}% used` : "Set your spend limit"}
+            {hasBudget ? t("{percent}% used", { percent: budgetUsed }) : t("Set your spend limit")}
           </AppText>
         </View>
         <AppButton compact onPress={onEdit} variant="secondary">
-          {hasBudget ? (showForm ? "Close" : "Edit") : "Set"}
+          {t(hasBudget ? (showForm ? "Close" : "Edit") : "Set")}
         </AppButton>
       </View>
 
@@ -599,11 +606,11 @@ function BudgetCard({
         <>
           <View style={styles.budgetNumbers}>
             <View>
-              <AppText color="textMuted" variant="caption">Budget</AppText>
+              <AppText color="textMuted" variant="caption">{t("Budget")}</AppText>
               <AppText variant="headline">{formatCurrencyCompact(budget)}</AppText>
             </View>
             <View style={styles.budgetEnd}>
-              <AppText color="textMuted" variant="caption">Remaining</AppText>
+              <AppText color="textMuted" variant="caption">{t("Remaining")}</AppText>
               <AppText style={{ color: tone }} variant="headline">{formatCurrencyCompact(remaining)}</AppText>
             </View>
           </View>
@@ -611,17 +618,17 @@ function BudgetCard({
             <View style={[styles.progressFill, { backgroundColor: tone, width: `${budgetUsed}%` }]} />
           </View>
           <AppText color="textSubtle" style={styles.progressCopy} variant="caption">
-            Spent {formatCurrencyCompact(spent)} of {formatCurrencyCompact(budget)}
+            {t("Spent {spent} of {budget}", { budget: formatCurrencyCompact(budget), spent: formatCurrencyCompact(spent) })}
           </AppText>
         </>
       ) : null}
 
       {showForm ? (
         <View style={hasBudget ? styles.budgetForm : undefined}>
-          <FormField keyboardType="decimal-pad" label="Budget amount" onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={amount} />
-          <FormField label="Note optional" onChangeText={onNoteChange} placeholder="Monthly spending target" style={styles.fieldGap} value={note} />
+          <FormField keyboardType="decimal-pad" label={t("Budget amount")} onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={amount} />
+          <FormField label={t("Note optional")} onChangeText={onNoteChange} placeholder={t("Monthly spending target")} style={styles.fieldGap} value={note} />
           <AppButton block disabled={saving} loading={saving} onPress={onSave}>
-            Save budget
+            {t("Save budget")}
           </AppButton>
         </View>
       ) : null}
@@ -671,23 +678,24 @@ function AddBillSheet({
   visible: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   return (
     <AppBottomSheet
       footer={
         <View style={styles.sheetFooterActions}>
           <AppButton block disabled={saving} loading={saving} onPress={onSave}>
-            {editingBill ? "Save changes" : "Save bill"}
+            {t(editingBill ? "Save changes" : "Save bill")}
           </AppButton>
           {editingBill && onRemove ? (
             <AppButton block disabled={saving} icon="trash-can-outline" onPress={onRemove} variant="danger">
-              Remove recurring bill
+              {t("Remove recurring bill")}
             </AppButton>
           ) : null}
         </View>
       }
       maxHeight="92%"
       onClose={onClose}
-      title={editingBill ? "Edit recurring bill" : "Add recurring bill"}
+      title={t(editingBill ? "Edit recurring bill" : "Add recurring bill")}
       visible={visible}
     >
       <View style={styles.billEditorHero}>
@@ -695,18 +703,18 @@ function AddBillSheet({
           <MaterialCommunityIcons name="calendar-refresh-outline" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.billEditorText}>
-          <AppText variant="bodyStrong">{billName || "Recurring payment"}</AppText>
+          <AppText variant="bodyStrong">{billName || t("Recurring payment")}</AppText>
           <AppText color="textMuted" numberOfLines={1} variant="caption">
-            {editingBill ? "Update amount, category or next due date." : "Monthly bills, subscriptions and repeat payments."}
+            {t(editingBill ? "Update amount, category or next due date." : "Monthly bills, subscriptions and repeat payments.")}
           </AppText>
         </View>
       </View>
 
-      <FormField label="Bill name" onChangeText={onNameChange} placeholder="Electricity, rent, internet" style={styles.fieldGap} value={billName} />
-      <FormField keyboardType="decimal-pad" label="Amount" onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={billAmount} />
-      <FormField autoCapitalize="none" label="Next due date" onChangeText={onDateChange} placeholder="YYYY-MM-DD" style={styles.fieldGap} value={billDate} />
+      <FormField label={t("Bill name")} onChangeText={onNameChange} placeholder={t("Electricity, rent, internet")} style={styles.fieldGap} value={billName} />
+      <FormField keyboardType="decimal-pad" label={t("Amount")} onChangeText={onAmountChange} placeholder="0" style={styles.fieldGap} value={billAmount} />
+      <FormField autoCapitalize="none" label={t("Next due date")} onChangeText={onDateChange} placeholder="YYYY-MM-DD" style={styles.fieldGap} value={billDate} />
 
-      <AppText color="textMuted" style={styles.filterLabel} variant="label">Category</AppText>
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Category")}</AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {categories.map((item) => {
           const visual = getCategoryVisual(item.name, item.icon, item.color);
@@ -722,14 +730,14 @@ function AddBillSheet({
         })}
       </ScrollView>
 
-      <AppText color="textMuted" style={styles.filterLabel} variant="label">Payment</AppText>
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Payment")}</AppText>
       <View style={styles.paymentGrid}>
         {paymentModes.map((item) => (
-          <CategoryChip active={billMethod === item.value} icon={item.icon} key={item.value} label={item.label} onPress={() => onMethodChange(item.value)} />
+          <CategoryChip active={billMethod === item.value} icon={item.icon} key={item.value} label={t(item.label)} onPress={() => onMethodChange(item.value)} />
         ))}
       </View>
 
-      <FormField label="Note optional" onChangeText={onNoteChange} placeholder="Plan, account or reminder" style={styles.fieldGap} value={billNote} />
+      <FormField label={t("Note optional")} onChangeText={onNoteChange} placeholder={t("Plan, account or reminder")} style={styles.fieldGap} value={billNote} />
     </AppBottomSheet>
   );
 }
@@ -746,6 +754,7 @@ function BillOccurrenceRow({
   onSkip?: () => void;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const bill = occurrence.recurring_bill_detail;
   const status = getOccurrenceStatus(occurrence);
   const visual = getCategoryVisual(bill?.category_detail?.name, bill?.category_detail?.icon, bill?.category_detail?.color);
@@ -755,17 +764,17 @@ function BillOccurrenceRow({
     <View style={styles.billBlock}>
       <ListRow
         amount={formatCurrencyCompact(occurrence.amount)}
-        description={`${getDueText(occurrence)} | ${bill?.payment_method?.toUpperCase() ?? "UPI"}`}
+        description={`${getDueText(occurrence, t)} | ${bill?.payment_method ? formatPaymentMethod(bill.payment_method) : "UPI"}`}
         icon={visual.icon}
         iconColor={tone}
         onPress={onOpen}
-        rightLabel={status}
-        title={bill?.name ?? "Bill"}
+        rightLabel={t(status)}
+        title={bill?.name ?? t("Bill")}
       />
       {onMarkPaid ? (
         <View style={styles.rowActions}>
-          <AppButton compact onPress={onMarkPaid} variant="secondary">Paid</AppButton>
-          {onSkip ? <AppButton compact onPress={onSkip} variant="tertiary">Skip</AppButton> : null}
+          <AppButton compact onPress={onMarkPaid} variant="secondary">{t("Paid")}</AppButton>
+          {onSkip ? <AppButton compact onPress={onSkip} variant="tertiary">{t("Skip")}</AppButton> : null}
         </View>
       ) : null}
     </View>
@@ -774,14 +783,15 @@ function BillOccurrenceRow({
 
 function RecurringBillRow({ bill, onPress }: { bill: RecurringBill; onPress: () => void }) {
   const visual = getCategoryVisual(bill.category_detail?.name, bill.category_detail?.icon, bill.category_detail?.color);
+  const { t } = useI18n();
   return (
     <ListRow
       amount={formatCurrencyCompact(bill.amount)}
-      description={`${bill.frequency} | Next ${formatDateLabel(bill.next_due_date)}`}
+      description={`${t(bill.frequency)} | ${t("Next {date}", { date: formatDateLabel(bill.next_due_date) })}`}
       icon={visual.icon}
       iconColor={visual.color}
       onPress={onPress}
-      rightLabel="Edit"
+      rightLabel={t("Edit")}
       title={bill.name}
     />
   );
@@ -805,6 +815,7 @@ function OccurrenceDetailSheet({
   saving: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   if (!occurrence) return null;
 
   const bill = occurrence.recurring_bill_detail;
@@ -814,33 +825,33 @@ function OccurrenceDetailSheet({
   const canResolve = status === "upcoming" || status === "overdue";
 
   return (
-    <AppBottomSheet maxHeight="86%" onClose={onClose} title="Bill details" visible={Boolean(occurrence)}>
+    <AppBottomSheet maxHeight="86%" onClose={onClose} title={t("Bill details")} visible={Boolean(occurrence)}>
       <View style={styles.occurrenceHero}>
         <View style={[styles.occurrenceIcon, { backgroundColor: `${tone}18` }]}>
           <MaterialCommunityIcons name={visual.icon} size={28} color={tone} />
         </View>
         <View style={styles.occurrenceHeroText}>
-          <AppText variant="headline">{bill?.name ?? "Recurring bill"}</AppText>
+          <AppText variant="headline">{bill?.name ?? t("Recurring bill")}</AppText>
           <AppText color="textMuted" variant="caption">
-            {getDueText(occurrence)}
+            {getDueText(occurrence, t)}
           </AppText>
         </View>
       </View>
 
       <View style={styles.detailGrid}>
-        <DetailTile label="Amount" value={formatCurrencyCompact(occurrence.amount)} />
-        <DetailTile label="Payment" value={bill?.payment_method?.toUpperCase() ?? "UPI"} />
-        <DetailTile label="Due date" value={formatDateLabel(occurrence.due_date)} />
-        <DetailTile label="Status" tone={tone} value={status} />
+        <DetailTile label={t("Amount")} value={formatCurrencyCompact(occurrence.amount)} />
+        <DetailTile label={t("Payment")} value={bill?.payment_method ? formatPaymentMethod(bill.payment_method) : "UPI"} />
+        <DetailTile label={t("Due date")} value={formatDateLabel(occurrence.due_date)} />
+        <DetailTile label={t("Status")} tone={tone} value={t(status)} />
       </View>
 
       {canResolve ? (
         <View style={styles.sheetActionRow}>
           <AppButton disabled={saving} icon="check-circle-outline" onPress={() => onMarkPaid(occurrence)} style={styles.sheetActionButton} variant="secondary">
-            Mark paid
+            {t("Mark paid")}
           </AppButton>
           <AppButton disabled={saving} icon="calendar-remove-outline" onPress={() => onSkip(occurrence)} style={styles.sheetActionButton} variant="tertiary">
-            Skip
+            {t("Skip")}
           </AppButton>
         </View>
       ) : null}
@@ -848,10 +859,10 @@ function OccurrenceDetailSheet({
       {bill ? (
         <View style={styles.sheetFooterActions}>
           <AppButton block icon="pencil-outline" onPress={() => onEditRecurring(bill)} variant="secondary">
-            Edit recurring payment
+            {t("Edit recurring payment")}
           </AppButton>
           <AppButton block disabled={saving} icon="trash-can-outline" onPress={() => onRemoveRecurring(bill)} variant="danger">
-            Remove recurring payment
+            {t("Remove recurring payment")}
           </AppButton>
         </View>
       ) : null}

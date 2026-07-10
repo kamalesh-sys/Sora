@@ -26,6 +26,8 @@ import { useAppSettings } from "../context/AppSettingsContext";
 import { useSoraResponsive } from "../theme/responsive";
 import { dsRadius, dsShadow, dsSize, dsSpace, dsTouch, dsTypography, makeDsColors } from "./tokens";
 
+const localeSystemFont = Platform.select({ android: "sans-serif", ios: "System", default: "System" });
+
 export function useDs() {
   const { accentColor, themeMode } = useAppSettings();
   return useMemo(() => ({ colors: makeDsColors(themeMode, accentColor) }), [accentColor, themeMode]);
@@ -44,9 +46,19 @@ export function AppText({
   variant?: AppTextVariant;
 }) {
   const { colors } = useDs();
+  const { language, t } = useAppSettings();
+  const localizedChildren = typeof children === "string" ? t(children) : children;
   return (
-    <Text {...props} style={[dsTypography[variant], { color: colors[color] }, style]}>
-      {children}
+    <Text
+      {...props}
+      style={[
+        dsTypography[variant],
+        { color: colors[color] },
+        style,
+        language === "en" ? null : { fontFamily: localeSystemFont },
+      ]}
+    >
+      {localizedChildren}
     </Text>
   );
 }
@@ -160,6 +172,7 @@ export function AppButton({
   variant?: "primary" | "secondary" | "tertiary" | "danger";
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   const scale = useRef(new Animated.Value(1)).current;
   const isDisabled = disabled || loading;
   const variantStyle =
@@ -177,7 +190,7 @@ export function AppButton({
 
   return (
     <Pressable
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel ? t(accessibilityLabel) : undefined}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       android_ripple={{ color: colors.press }}
@@ -217,6 +230,7 @@ export const AmountInput = forwardRef<TextInput, TextInputProps & { error?: stri
   ref
 ) {
   const { colors } = useDs();
+  const { language, t } = useAppSettings();
   const [focused, setFocused] = useState(false);
   return (
     <View>
@@ -245,10 +259,15 @@ export const AmountInput = forwardRef<TextInput, TextInputProps & { error?: stri
             setFocused(true);
             onFocus?.(event);
           }}
-          placeholder="0"
+          placeholder={t("0")}
           placeholderTextColor={colors.textSubtle}
           selectionColor={colors.accent}
-          style={[styles.amountInput, { color: colors.text }, style]}
+          style={[
+            styles.amountInput,
+            { color: colors.text },
+            style,
+            language === "en" ? null : { fontFamily: localeSystemFont },
+          ]}
         />
       </View>
       {error ? <AppText color="danger" style={styles.helperText} variant="caption">{error}</AppText> : null}
@@ -278,8 +297,10 @@ export function CategoryChip({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   return (
     <Pressable
+      accessibilityLabel={t(label)}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       android_ripple={{ color: colors.press }}
@@ -334,10 +355,11 @@ export function IconButton({
   tone?: "default" | "danger" | "primary";
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   const color = tone === "danger" ? colors.danger : tone === "primary" ? colors.accent : colors.text;
   return (
     <Pressable
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel ? t(accessibilityLabel) : undefined}
       accessibilityRole="button"
       android_ripple={{ color: colors.press, borderless: true }}
       hitSlop={8}
@@ -355,6 +377,7 @@ export function FormField({
   label,
   onBlur,
   onFocus,
+  placeholder,
   style,
   ...props
 }: TextInputProps & {
@@ -363,6 +386,7 @@ export function FormField({
   label?: string;
 }) {
   const { colors } = useDs();
+  const { language, t } = useAppSettings();
   const [focused, setFocused] = useState(false);
   return (
     <View style={style}>
@@ -377,6 +401,7 @@ export function FormField({
           setFocused(true);
           onFocus?.(event);
         }}
+        placeholder={placeholder ? t(placeholder) : undefined}
         placeholderTextColor={colors.textSubtle}
         selectionColor={colors.accent}
         style={[
@@ -388,6 +413,7 @@ export function FormField({
             color: colors.text,
           },
           inputStyle,
+          language === "en" ? null : { fontFamily: localeSystemFont },
         ]}
       />
       {error ? <AppText color="danger" style={styles.helperText} variant="caption">{error}</AppText> : null}
@@ -431,10 +457,11 @@ export function AppSegmentedControl<T extends string>({
   value: T;
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
 
   return (
     <View
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel ? t(accessibilityLabel) : undefined}
       accessibilityRole="tablist"
       style={[styles.segmentedTrack, { backgroundColor: colors.chipBg }, style]}
     >
@@ -481,6 +508,7 @@ export function ListRow({
   title: string;
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   const content = (
     <View style={[styles.listRow, { borderBottomColor: colors.border }]}>
       {icon ? (
@@ -502,7 +530,7 @@ export function ListRow({
 
   if (!onPress) return content;
   return (
-    <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress}>
+    <Pressable accessibilityLabel={t(title)} accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress}>
       {content}
     </Pressable>
   );
@@ -545,6 +573,87 @@ export function ErrorState({ text }: { text?: string }) {
   );
 }
 
+export function ProgressBar({
+  accessibilityLabel,
+  color,
+  progress,
+  style,
+  tone = "primary",
+}: {
+  accessibilityLabel?: string;
+  color?: string;
+  progress: number;
+  style?: StyleProp<ViewStyle>;
+  tone?: "primary" | "success" | "warning" | "danger";
+}) {
+  const { colors } = useDs();
+  const { t } = useAppSettings();
+  const safeProgress = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
+  const fillColor = color ?? (
+    tone === "success"
+      ? colors.success
+      : tone === "warning"
+        ? colors.warning
+        : tone === "danger"
+          ? colors.danger
+          : colors.accent
+  );
+
+  return (
+    <View
+      accessibilityLabel={
+        accessibilityLabel
+          ? t(accessibilityLabel)
+          : t("{percent}% complete", { percent: Math.round(safeProgress * 100) })
+      }
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(safeProgress * 100) }}
+      style={[styles.progressTrack, { backgroundColor: colors.chipBg }, style]}
+    >
+      <View style={[styles.progressFill, { backgroundColor: fillColor, width: `${safeProgress * 100}%` }]} />
+    </View>
+  );
+}
+
+export function StatusTag({
+  icon,
+  label,
+  tone = "neutral",
+}: {
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  tone?: "neutral" | "info" | "success" | "warning" | "danger";
+}) {
+  const { colors } = useDs();
+  const { t } = useAppSettings();
+  const palette =
+    tone === "success"
+      ? { background: colors.successBg, foreground: colors.success }
+      : tone === "warning"
+        ? { background: colors.warningBg, foreground: colors.warning }
+        : tone === "danger"
+          ? { background: colors.dangerBg, foreground: colors.danger }
+          : tone === "info"
+            ? { background: colors.infoBg, foreground: colors.info }
+            : { background: colors.chipBg, foreground: colors.textMuted };
+
+  return (
+    <View
+      accessibilityLabel={t(label)}
+      style={[styles.statusTag, { backgroundColor: palette.background }]}
+    >
+      {icon ? (
+        <MaterialCommunityIcons name={icon} size={14} color={palette.foreground} />
+      ) : (
+        <View style={[styles.statusDot, { backgroundColor: palette.foreground }]} />
+      )}
+      <AppText numberOfLines={1} style={{ color: palette.foreground }} variant="caption">
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
 export function BottomActionBar({ children }: { children: ReactNode }) {
   const { colors } = useDs();
   const insets = useSafeAreaInsets();
@@ -580,10 +689,11 @@ export function AppBottomSheet({
   visible: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.sheetRoot}>
-        <Pressable accessibilityLabel="Close sheet" style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessibilityLabel={t("Close sheet")} style={StyleSheet.absoluteFill} onPress={onClose} />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetKeyboard}>
           <View style={[styles.sheet, { backgroundColor: colors.surface, maxHeight }]}>
             <View style={[styles.sheetHandle, { backgroundColor: colors.borderStrong }]} />
@@ -674,13 +784,14 @@ export function AppCandleChart({
   values: number[];
 }) {
   const { colors } = useDs();
+  const { t } = useAppSettings();
   const max = Math.max(...values, 0);
   const activeColor = color ?? colors.accent;
   const emptyColor = colors.chipBg;
   const chartValues = values.length ? values : [0, 0, 0, 0, 0, 0, 0];
 
   return (
-    <View accessibilityLabel={accessibilityLabel} accessibilityRole="image" style={[styles.candleChart, { height }]}>
+    <View accessibilityLabel={t(accessibilityLabel)} accessibilityRole="image" style={[styles.candleChart, { height }]}>
       {chartValues.map((value, index) => {
         const active = value > 0;
         const normalized = max > 0 ? value / max : 0;
@@ -816,6 +927,16 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  progressFill: {
+    borderRadius: dsRadius.pill,
+    height: "100%",
+  },
+  progressTrack: {
+    borderRadius: dsRadius.pill,
+    height: 8,
+    overflow: "hidden",
+    width: "100%",
+  },
   rupee: {
     marginRight: dsSpace[1],
   },
@@ -939,5 +1060,20 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     marginTop: dsSpace[0.5],
+  },
+  statusDot: {
+    borderRadius: dsRadius.pill,
+    height: 7,
+    width: 7,
+  },
+  statusTag: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: dsRadius.pill,
+    flexDirection: "row",
+    gap: dsSpace[0.5],
+    minHeight: 28,
+    paddingHorizontal: dsSpace[1],
+    paddingVertical: dsSpace[0.5],
   },
 });

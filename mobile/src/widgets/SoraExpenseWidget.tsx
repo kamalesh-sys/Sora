@@ -2,6 +2,7 @@
 
 import { FlexWidget, TextWidget } from "react-native-android-widget";
 
+import { translate } from "../i18n/catalogs";
 import type { SoraExpenseWidgetData } from "./widgetTypes";
 
 const widgetColors = {
@@ -20,6 +21,7 @@ const widgetColors = {
 } as const;
 
 function widgetContent(data: SoraExpenseWidgetData, dark = false) {
+  const t = (message: string) => translate(data.language, message);
   const colors = {
     accent: dark ? widgetColors.accentDark : widgetColors.accent,
     card: dark ? widgetColors.cardDark : widgetColors.card,
@@ -56,7 +58,7 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
           <TextWidget
             maxLines={1}
             style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}
-            text="Recent expense"
+            text={t("Recent expense")}
             truncate="END"
           />
         </FlexWidget>
@@ -125,13 +127,13 @@ function widgetContent(data: SoraExpenseWidgetData, dark = false) {
           <TextWidget
             maxLines={1}
             style={{ color: colors.text, fontSize: 15, fontWeight: "800" }}
-            text="No expense yet"
+            text={t("No expense yet")}
             truncate="END"
           />
           <TextWidget
             maxLines={2}
             style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}
-            text="Tap plus to add your first entry."
+            text={t("Tap plus to add your first entry.")}
             truncate="END"
           />
         </FlexWidget>

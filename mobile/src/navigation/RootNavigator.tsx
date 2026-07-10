@@ -1,7 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
 
-import { StartupLoadingScreen } from "../components/StartupLoadingScreen";
 import { useAuth } from "../context/AuthContext";
 import { AuthScreen } from "../screens/AuthScreen";
 import { BillsScreen } from "../screens/BillsScreen";
@@ -9,6 +7,8 @@ import { CategoriesScreen } from "../screens/CategoriesScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { ExpenseFormScreen } from "../screens/ExpenseFormScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
+import { GoalDetailScreen } from "../screens/GoalDetailScreen";
+import { GoalsScreen } from "../screens/GoalsScreen";
 import { PeopleScreen } from "../screens/PeopleScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReportsScreen } from "../screens/ReportsScreen";
@@ -18,6 +18,8 @@ export type RootStackParamList = {
   Categories: undefined;
   ExpenseForm: { expenseId?: number } | undefined;
   Expenses: undefined;
+  GoalDetail: { created?: boolean; goalId: number };
+  Goals: undefined;
   Home: undefined;
   People: undefined;
   Profile: undefined;
@@ -28,17 +30,7 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { initializing, user } = useAuth();
-  const [minimumStartupDone, setMinimumStartupDone] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMinimumStartupDone(true), 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (initializing || !minimumStartupDone) {
-    return <StartupLoadingScreen />;
-  }
+  const { user } = useAuth();
 
   if (!user) {
     return <AuthScreen />;
@@ -47,14 +39,15 @@ export function RootNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{
-        animation: "fade_from_bottom",
-        animationDuration: 140,
+        animation: "none",
         headerShown: false,
       }}
       initialRouteName="Home"
     >
       <Stack.Screen name="Home" component={DashboardScreen} />
       <Stack.Screen name="Expenses" component={ExpensesScreen} />
+      <Stack.Screen name="Goals" component={GoalsScreen} />
+      <Stack.Screen name="GoalDetail" component={GoalDetailScreen} />
       <Stack.Screen name="ExpenseForm" component={ExpenseFormScreen} />
       <Stack.Screen name="Categories" component={CategoriesScreen} />
       <Stack.Screen name="Bills" component={BillsScreen} />

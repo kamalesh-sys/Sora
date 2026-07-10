@@ -1,9 +1,7 @@
-import { Animated, Easing, Platform, Pressable, StyleSheet, View } from "react-native";
-import { useRef } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -36,7 +34,7 @@ const allItems = [...leftItems, centerItem, ...rightItems];
 
 export function BottomNav({ current }: { current: BottomNavKey }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { colors } = useAppSettings();
+  const { colors, t } = useAppSettings();
   const insets = useSafeAreaInsets();
   const responsive = useSoraResponsive();
   const bottomInset = Platform.OS === "android" ? Math.max(insets.bottom, 0) : insets.bottom;
@@ -48,7 +46,7 @@ export function BottomNav({ current }: { current: BottomNavKey }) {
       <NavItemButton
         key={item.key}
         active={item.key === current}
-        item={item}
+        item={{ ...item, label: t(item.label) }}
         onPress={() => navigation.navigate(item.route as never)}
         responsive={responsive}
       />
@@ -90,82 +88,22 @@ function NavItemButton({
   onPress: () => void;
   responsive: ReturnType<typeof useSoraResponsive>;
 }) {
-  const { colors } = useAppSettings();
+  const { colors, language } = useAppSettings();
   const { navTap } = useFeedback();
-  const scale = useRef(new Animated.Value(1)).current;
-  const keyframe = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
   const isAdd = item.key === "Add";
   const iconColor = isAdd ? "#ffffff" : active ? colors.accent : colors.muted;
   const rippleColor = isAdd ? "rgba(255,255,255,0.26)" : `${colors.accent}24`;
-  const iconLift = keyframe.interpolate({
-    inputRange: [0, 0.55, 1],
-    outputRange: [0, -5, 0],
-  });
-  const iconPop = keyframe.interpolate({
-    inputRange: [0, 0.55, 1],
-    outputRange: [1, 1.18, 1],
-  });
-  const iconOpacity = keyframe.interpolate({
-    inputRange: [0, 0.35, 1],
-    outputRange: [1, 0.72, 1],
-  });
-  const addRotate = keyframe.interpolate({
-    inputRange: [0, 0.55, 1],
-    outputRange: ["0deg", "45deg", "0deg"],
-  });
-  const pulseScale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.78, 1.45],
-  });
-  const pulseOpacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.34, 0],
-  });
-
-  const animateTo = (toValue: number) => {
-    Animated.spring(scale, {
-      toValue,
-      friction: 6,
-      tension: 170,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const playIconAnimation = () => {
-    keyframe.stopAnimation();
-    pulse.stopAnimation();
-    keyframe.setValue(0);
-    pulse.setValue(0);
-
-    Animated.parallel([
-      Animated.timing(keyframe, {
-        toValue: 1,
-        duration: isAdd ? 220 : 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      isAdd
-        ? Animated.timing(pulse, {
-            toValue: 1,
-            duration: 260,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          })
-        : Animated.delay(0),
-    ]).start();
-  };
 
   return (
     <Pressable
+      accessibilityLabel={item.label}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       android_ripple={{ color: rippleColor, borderless: true }}
       onPress={() => {
         navTap();
-        playIconAnimation();
-        setTimeout(onPress, 70);
+        onPress();
       }}
-      onPressIn={() => animateTo(isAdd ? 0.88 : 0.92)}
-      onPressOut={() => animateTo(1)}
       style={[
         styles.item,
         isAdd && styles.addItem,
@@ -173,35 +111,7 @@ function NavItemButton({
       ]}
       hitSlop={8}
     >
-      <Animated.View
-        style={[
-          styles.animatedItem,
-          isAdd && [
-            styles.animatedAddItem,
-            { marginTop: -Math.round(responsive.nav.fabSize * 0.34) },
-          ],
-          {
-            opacity: iconOpacity,
-            transform: [{ translateY: iconLift }, { scale }],
-          },
-        ]}
-      >
-        {isAdd ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.addPulse,
-              {
-                borderColor: colors.accent,
-                borderRadius: (responsive.nav.fabSize + 8) / 2,
-                height: responsive.nav.fabSize + 8,
-                opacity: pulseOpacity,
-                transform: [{ scale: pulseScale }],
-                width: responsive.nav.fabSize + 8,
-              },
-            ]}
-          />
-        ) : null}
+      <View style={[styles.animatedItem, isAdd && [styles.animatedAddItem, { marginTop: -Math.round(responsive.nav.fabSize * 0.34) }]]}>
         <View
           style={[
             styles.iconBox,
@@ -221,17 +131,11 @@ function NavItemButton({
             ],
           ]}
         >
-          <Animated.View
-            style={{
-              transform: [{ scale: iconPop }, ...(isAdd ? [{ rotate: addRotate }] : [])],
-            }}
-          >
-            <MaterialCommunityIcons
-              name={item.icon}
-              size={isAdd ? Math.round(responsive.nav.fabSize * 0.5) : responsive.nav.iconSize + 3}
-              color={iconColor}
-            />
-          </Animated.View>
+          <MaterialCommunityIcons
+            name={item.icon}
+            size={isAdd ? Math.round(responsive.nav.fabSize * 0.5) : responsive.nav.iconSize + 3}
+            color={iconColor}
+          />
         </View>
         {!isAdd ? (
           <Text
@@ -242,13 +146,14 @@ function NavItemButton({
               {
                 color: active ? colors.accent : colors.muted,
                 fontSize: responsive.nav.label,
+                fontFamily: language === "en" ? "Inter_600SemiBold" : "sans-serif-medium",
               },
             ]}
           >
             {item.label}
           </Text>
         ) : null}
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -294,8 +199,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  animatedAddItem: {
-  },
+  animatedAddItem: {},
   iconBox: {
     alignItems: "center",
     borderRadius: 18,
@@ -309,12 +213,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
   },
-  addPulse: {
-    borderWidth: 2,
-    position: "absolute",
-    top: -4,
-  },
   label: {
+    includeFontPadding: false,
+    lineHeight: 14,
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,

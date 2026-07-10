@@ -3,6 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 import { API_BASE_URL } from "../config/api";
+import { translateActive } from "../i18n/catalogs";
 
 export type ReportExportType = "csv" | "pdf";
 
@@ -19,7 +20,7 @@ export async function exportMonthlyReport({
 }) {
   const directory = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
   if (!directory) {
-    throw new Error("File storage is not available on this device.");
+    throw new Error(translateActive("File storage is not available on this device."));
   }
 
   const endpoint = type === "csv" ? "export-csv" : "export-pdf";
@@ -38,17 +39,17 @@ export async function exportMonthlyReport({
   );
 
   if (result.status < 200 || result.status >= 300) {
-    throw new Error(`Export failed with status ${result.status}`);
+    throw new Error(translateActive("Export failed with status {status}", { status: result.status }));
   }
 
   const canShare = await Sharing.isAvailableAsync();
   if (canShare) {
     await Sharing.shareAsync(result.uri, {
-      dialogTitle: type === "csv" ? "Share CSV report" : "Share PDF report",
+      dialogTitle: translateActive(type === "csv" ? "Share CSV report" : "Share PDF report"),
       mimeType: type === "csv" ? "text/csv" : "application/pdf",
     });
     return;
   }
 
-  Alert.alert("Export saved", result.uri);
+  Alert.alert(translateActive("Export saved"), result.uri);
 }

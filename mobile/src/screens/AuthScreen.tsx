@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, LayoutAnimation, Modal, Platform, Pressable, StyleSheet, TextInput, UIManager, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { AppButton, AppCard, AppScreen, AppSegmentedControl, AppText, ErrorState, FormField, useDs } from "../design-system";
 import { dsRadius, dsSpace, dsTouch } from "../design-system/tokens";
 import { TurnstileBox } from "../components/TurnstileBox";
 import { useAuth } from "../context/AuthContext";
+import { useI18n } from "../i18n";
 import { getApiErrorMessage } from "../services/apiClient";
 
 type AuthMode = "login" | "signup";
@@ -15,13 +16,9 @@ const authModes: Array<{ label: string; value: AuthMode }> = [
   { label: "Sign up", value: "signup" },
 ];
 
-if (Platform.OS === "android") {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
-
 export function AuthScreen() {
   const { login, register } = useAuth();
-  const stretch = useRef(new Animated.Value(1)).current;
+  const { t } = useI18n();
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,44 +30,26 @@ export function AuthScreen() {
   const [error, setError] = useState("");
 
   const isSignup = mode === "signup";
-  const title = isSignup ? "Create account" : "Log in";
-  const actionLabel = isSignup ? "Create account" : "Log in";
-  const loadingLabel = isSignup ? "Creating account" : "Logging in";
+  const title = t(isSignup ? "Create account" : "Log in");
+  const actionLabel = t(isSignup ? "Create account" : "Log in");
+  const localizedAuthModes = useMemo(() => authModes.map((item) => ({ ...item, label: t(item.label) })), [t]);
 
-  const passwordPlaceholder = useMemo(() => (isSignup ? "Minimum 12 characters" : "Password"), [isSignup]);
-  const stretchStyle = {
-    transform: [{ scaleY: stretch }],
-  };
-
+  const passwordPlaceholder = useMemo(() => t(isSignup ? "Minimum 12 characters" : "Password"), [isSignup, t]);
   const switchMode = (nextMode: AuthMode) => {
     if (nextMode === mode) return;
-    stretch.stopAnimation();
-    stretch.setValue(0.985);
-    LayoutAnimation.configureNext({
-      create: { duration: 220, property: LayoutAnimation.Properties.opacity, type: LayoutAnimation.Types.easeInEaseOut },
-      delete: { duration: 160, property: LayoutAnimation.Properties.opacity, type: LayoutAnimation.Types.easeInEaseOut },
-      duration: 260,
-      update: { type: LayoutAnimation.Types.easeInEaseOut },
-    });
     setMode(nextMode);
     setError("");
     setTurnstileToken("");
     setTurnstileResetKey((current) => current + 1);
-    Animated.spring(stretch, {
-      friction: 7,
-      tension: 140,
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
   };
 
   const validate = () => {
     const cleanEmail = email.trim();
-    if (!cleanEmail) return "Email is required.";
-    if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) return "Enter a valid email address.";
-    if (!password) return "Password is required.";
-    if (isSignup && password.length < 12) return "Password must be at least 12 characters.";
-    if (!turnstileToken) return "Complete human verification.";
+    if (!cleanEmail) return t("Email is required.");
+    if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) return t("Enter a valid email address.");
+    if (!password) return t("Password is required.");
+    if (isSignup && password.length < 12) return t("Password must be at least 12 characters.");
+    if (!turnstileToken) return t("Complete human verification.");
     return "";
   };
 
@@ -90,7 +69,7 @@ export function AuthScreen() {
         await login(email.trim(), password, turnstileToken);
       }
     } catch (submitError) {
-      setError(getApiErrorMessage(submitError, isSignup ? "Could not create account." : "Invalid email or password."));
+      setError(t(getApiErrorMessage(submitError, isSignup ? "Could not create account." : "Invalid email or password.")));
       setTurnstileToken("");
       setTurnstileResetKey((current) => current + 1);
     } finally {
@@ -100,13 +79,12 @@ export function AuthScreen() {
 
   return (
     <AppScreen contentStyle={styles.content}>
-      <Animated.View style={[styles.brandWrap, stretchStyle]}>
+      <View style={styles.brandWrap}>
         <AppText style={styles.brandTitle} variant="title">Sora Expense</AppText>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={stretchStyle}>
-        <AppCard elevated style={styles.panel}>
-          <AppSegmentedControl accessibilityLabel="Authentication mode" items={authModes} onChange={switchMode} style={styles.modeSwitch} value={mode} />
+      <AppCard elevated style={styles.panel}>
+          <AppSegmentedControl accessibilityLabel={t("Authentication mode")} items={localizedAuthModes} onChange={switchMode} style={styles.modeSwitch} value={mode} />
 
           <AppText style={styles.title} variant="title">{title}</AppText>
 
@@ -116,9 +94,9 @@ export function AuthScreen() {
             <FormField
               autoCapitalize="words"
               editable={!loading}
-              label="Name"
+              label={t("Name")}
               onChangeText={setName}
-              placeholder="Your name"
+              placeholder={t("Your name")}
               returnKeyType="next"
               style={styles.field}
               value={name}
@@ -129,7 +107,7 @@ export function AuthScreen() {
             autoCapitalize="none"
             editable={!loading}
             keyboardType="email-address"
-            label="Email"
+            label={t("Email")}
             onChangeText={setEmail}
             placeholder="you@example.com"
             returnKeyType="next"
@@ -156,13 +134,10 @@ export function AuthScreen() {
             />
           </View>
 
-          <AppButton block disabled={loading} loading={loading} onPress={submit} style={styles.submit}>
-            {actionLabel}
+          <AppButton block disabled={loading} onPress={submit} style={styles.submit}>
+            {loading ? t("Please wait") : actionLabel}
           </AppButton>
-        </AppCard>
-      </Animated.View>
-
-      <AuthLoadingOverlay label={loadingLabel} visible={loading} />
+      </AppCard>
     </AppScreen>
   );
 }
@@ -183,11 +158,12 @@ function PasswordField({
   value: string;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <AppText color="textMuted" style={styles.label} variant="label">
-        Password
+        {t("Password")}
       </AppText>
       <View
         style={[
@@ -213,7 +189,7 @@ function PasswordField({
           value={value}
         />
         <Pressable
-          accessibilityLabel={secure ? "Show password" : "Hide password"}
+          accessibilityLabel={t(secure ? "Show password" : "Hide password")}
           accessibilityRole="button"
           android_ripple={{ color: colors.press, borderless: true }}
           hitSlop={8}
@@ -224,52 +200,6 @@ function PasswordField({
         </Pressable>
       </View>
     </View>
-  );
-}
-
-function AuthLoadingOverlay({ label, visible }: { label: string; visible: boolean }) {
-  const { colors } = useDs();
-  const spin = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) return;
-    spin.setValue(0);
-    const spinAnimation = Animated.loop(
-      Animated.timing(spin, {
-        duration: 900,
-        easing: Easing.linear,
-        toValue: 1,
-        useNativeDriver: true,
-      })
-    );
-    spinAnimation.start();
-    return () => {
-      spinAnimation.stop();
-    };
-  }, [spin, visible]);
-
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  return (
-    <Modal animationType="fade" transparent visible={visible}>
-      <View style={styles.loadingOverlay}>
-        <View style={[styles.loadingPanel, { backgroundColor: colors.surface }]}>
-          <Animated.View
-            style={[
-              styles.loadingRing,
-              {
-                borderColor: colors.border,
-                borderTopColor: colors.accent,
-                transform: [{ rotate }],
-              },
-            ]}
-          />
-          <AppText style={styles.loadingText} variant="headline">{label}</AppText>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -298,28 +228,6 @@ const styles = StyleSheet.create({
   },
   label: {
     marginBottom: dsSpace[0.5],
-  },
-  loadingOverlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(10,11,13,0.42)",
-    flex: 1,
-    justifyContent: "center",
-    padding: dsSpace[2],
-  },
-  loadingPanel: {
-    alignItems: "center",
-    borderRadius: dsRadius.lg,
-    minWidth: 188,
-    padding: dsSpace[3],
-  },
-  loadingRing: {
-    borderRadius: 28,
-    borderWidth: 3,
-    height: 56,
-    width: 56,
-  },
-  loadingText: {
-    marginTop: dsSpace[2],
   },
   modeSwitch: {
     marginBottom: dsSpace[3],

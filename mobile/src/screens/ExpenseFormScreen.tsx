@@ -12,6 +12,7 @@ import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/dat
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import DragList, { type DragListRenderItemInfo } from "react-native-draglist";
 
@@ -33,6 +34,7 @@ import {
   useDs,
 } from "../design-system";
 import { useFeedback } from "../context/FeedbackContext";
+import { Translate, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
   createExpense,
@@ -75,11 +77,11 @@ function fromDateInputValue(value: string) {
   return new Date(`${value}T00:00:00`);
 }
 
-function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod) {
+function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod, t: Translate) {
   if (category?.name) {
     return category.name;
   }
-  return paymentMethod === "upi" ? "UPI expense" : "Expense";
+  return t(paymentMethod === "upi" ? "UPI expense" : "Expense");
 }
 
 function sanitizeAmount(value: string) {
@@ -100,6 +102,7 @@ function clamp(value: number, min: number, max: number) {
 export function ExpenseFormScreen({ navigation, route }: Props) {
   const { colors } = useDs();
   const { success } = useFeedback();
+  const { t } = useI18n();
   const amountRef = useRef<TextInput>(null);
   const expenseId = route.params?.expenseId;
   const isEditing = Boolean(expenseId);
@@ -123,7 +126,8 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     [categories, category]
   );
   const cleanAmount = Number(amount);
-  const amountError = amountTouched && (!Number.isFinite(cleanAmount) || cleanAmount <= 0) ? "Enter an amount greater than 0." : "";
+  const amountError = amountTouched && (!Number.isFinite(cleanAmount) || cleanAmount <= 0) ? t("Enter an amount greater than 0.") : "";
+  const localizedPaymentModes = useMemo(() => paymentModes.map((item) => ({ ...item, label: t(item.label) })), [t]);
 
   const reorderCategories = useCallback((fromIndex: number, toIndex: number) => {
     setCategories((current) => {
@@ -169,16 +173,38 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         setDetailsOpen(Boolean(expense.title || expense.note));
       }
     } catch {
-      setError("Could not load expense form.");
+      setError(t("Could not load expense form."));
     } finally {
       setLoading(false);
       setTimeout(() => amountRef.current?.focus(), 120);
     }
-  }, [expenseId]);
+  }, [expenseId, t]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const refreshCategories = useCallback(async () => {
+    try {
+      let categoryRows = await getCategories();
+      if (!categoryRows.length) {
+        categoryRows = await seedDefaultCategories();
+      }
+      const ordered = await applySavedCategoryOrder(categoryRows);
+      setCategories(ordered);
+      setCategory((current) => (current && ordered.some((item) => item.id === current) ? current : ordered[0]?.id ?? null));
+    } catch {
+      // Keep the current category rail usable when a background refresh fails.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading) {
+        void refreshCategories();
+      }
+    }, [loading, refreshCategories])
+  );
 
   const save = async () => {
     setAmountTouched(true);
@@ -186,7 +212,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       return;
     }
     if (!isValidDate(expenseDate)) {
-      setError("Choose a valid date.");
+      setError(t("Choose a valid date."));
       return;
     }
 
@@ -203,7 +229,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         note: note.trim(),
         paid_by_user: "me",
         payment_method: paymentMethod,
-        title: title.trim() || getSmartTitle(selectedCategory, paymentMethod),
+        title: title.trim() || getSmartTitle(selectedCategory, paymentMethod, t),
         visibility,
       };
 
@@ -221,7 +247,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       void refreshWidgetFromLatestExpense();
       navigation.navigate("Expenses");
     } catch {
-      setError("Could not save expense. Check connection and try again.");
+      setError(t("Could not save expense. Check connection and try again."));
     } finally {
       setSaving(false);
     }
@@ -231,10 +257,10 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     if (!expenseId) {
       return;
     }
-    Alert.alert("Delete expense", "This expense will be removed.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Delete expense"), t("This expense will be removed."), [
+      { text: t("Cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("Delete"),
         style: "destructive",
         onPress: async () => {
           setSaving(true);
@@ -244,7 +270,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             void refreshWidgetFromLatestExpense();
             navigation.navigate("Expenses");
           } catch {
-            setError("Could not delete expense.");
+            setError(t("Could not delete expense."));
           } finally {
             setSaving(false);
           }
@@ -275,11 +301,11 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   return (
     <AppScreen contentStyle={styles.screenContent}>
       <View style={styles.header}>
-        <IconButton accessibilityLabel="Close add expense" icon="close" onPress={() => navigation.goBack()} />
+        <IconButton accessibilityLabel={t("Close add expense")} icon="close" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
-          <AppText variant="headline">{isEditing ? "Edit expense" : "Add expense"}</AppText>
+          <AppText variant="headline">{t(isEditing ? "Edit expense" : "Add expense")}</AppText>
         </View>
-        {isEditing ? <IconButton accessibilityLabel="Delete expense" icon="trash-can-outline" onPress={confirmDelete} tone="danger" /> : <View style={styles.headerSpacer} />}
+        {isEditing ? <IconButton accessibilityLabel={t("Delete expense")} icon="trash-can-outline" onPress={confirmDelete} tone="danger" /> : <View style={styles.headerSpacer} />}
       </View>
 
       <ErrorState text={error} />
@@ -300,7 +326,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             value={amount}
           />
 
-          <SectionHeader action="Manage" onAction={() => navigation.navigate("Categories")} title="Category" />
+          <SectionHeader action={t("Manage")} onAction={() => navigation.navigate("Categories")} title={t("Category")} />
           <ReorderableCategoryRail
             categories={categories}
             onManage={() => navigation.navigate("Categories")}
@@ -309,17 +335,17 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             selectedId={category}
           />
 
-          <SectionHeader title="Payment" />
-          <AppSegmentedControl accessibilityLabel="Payment method" items={paymentModes} onChange={setPaymentMethod} style={styles.paymentSwitch} value={paymentMethod} />
+          <SectionHeader title={t("Payment")} />
+          <AppSegmentedControl accessibilityLabel={t("Payment method")} items={localizedPaymentModes} onChange={setPaymentMethod} style={styles.paymentSwitch} value={paymentMethod} />
 
           <AppCard style={styles.quickDetailsCard}>
             <View style={styles.quickDetailsTop}>
               <View>
-                <AppText color="textMuted" variant="caption">Date</AppText>
+                <AppText color="textMuted" variant="caption">{t("Date")}</AppText>
                 <AppText variant="bodyStrong">{formatDateLabel(expenseDate)}</AppText>
               </View>
               <View style={styles.quickActions}>
-                <IconButton accessibilityLabel="Pick date" icon="calendar-month-outline" onPress={() => setShowDatePicker(true)} tone="primary" />
+                <IconButton accessibilityLabel={t("Pick date")} icon="calendar-month-outline" onPress={() => setShowDatePicker(true)} tone="primary" />
               </View>
             </View>
             {showDatePicker ? (
@@ -332,22 +358,22 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             ) : null}
           </AppCard>
 
-          <Pressable android_ripple={{ color: colors.press }} onPress={() => setDetailsOpen((current) => !current)} style={styles.detailsToggle}>
-            <AppText color="textMuted" variant="label">{detailsOpen ? "Hide details" : "Add label or note"}</AppText>
+          <Pressable accessibilityLabel={t(detailsOpen ? "Hide details" : "Add label or note")} accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={() => setDetailsOpen((current) => !current)} style={styles.detailsToggle}>
+            <AppText color="textMuted" variant="label">{t(detailsOpen ? "Hide details" : "Add label or note")}</AppText>
             <MaterialCommunityIcons name={detailsOpen ? "chevron-up" : "chevron-down"} size={22} color={colors.textMuted} />
           </Pressable>
 
           {detailsOpen ? (
             <AppCard>
-              <FormField label="Label" onChangeText={setTitle} placeholder={getSmartTitle(selectedCategory, paymentMethod)} value={title} />
+              <FormField label={t("Label")} onChangeText={setTitle} placeholder={getSmartTitle(selectedCategory, paymentMethod, t)} value={title} />
               <View style={{ height: dsSpace[1.5] }} />
               <FormField
-                label="Note"
+                label={t("Note")}
                 inputStyle={styles.noteField}
                 multiline
                 numberOfLines={3}
                 onChangeText={setNote}
-                placeholder="Optional"
+                placeholder={t("Optional")}
                 value={note}
               />
             </AppCard>
@@ -357,7 +383,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
 
       <BottomActionBar>
         <AppButton block disabled={saving || loading} loading={saving} onPress={save}>
-          {isEditing ? "Save changes" : "Save expense"}
+          {t(isEditing ? "Save changes" : "Save expense")}
         </AppButton>
       </BottomActionBar>
     </AppScreen>
@@ -447,9 +473,10 @@ function ReorderableCategoryRail({
 
 function AddCategoryRailButton({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   return (
     <Pressable
-      accessibilityLabel="Add category"
+      accessibilityLabel={t("Add category")}
       accessibilityRole="button"
       android_ripple={{ color: colors.press, borderless: true }}
       disabled={disabled}

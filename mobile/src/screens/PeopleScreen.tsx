@@ -23,6 +23,7 @@ import {
 } from "../design-system";
 import { dsRadius, dsSpace } from "../design-system/tokens";
 import { useAuth } from "../context/AuthContext";
+import { useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { createExpense, createPerson, createSettlement, deletePerson, getPeopleOverview, getPersonHistory } from "../services/expenseApi";
 import type { Expense, Person, PersonLedger } from "../types/api";
@@ -81,6 +82,7 @@ function getPendingShares(history: Expense[], personId: number, userId: number, 
 export function PeopleScreen({ navigation }: Props) {
   const { colors } = useDs();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [people, setPeople] = useState<Person[]>([]);
   const [ledgers, setLedgers] = useState<Record<string, PersonLedger>>({});
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -111,11 +113,11 @@ export function PeopleScreen({ navigation }: Props) {
       setPeople(overview.people);
       setLedgers(overview.ledgers);
     } catch {
-      setError("Could not load people.");
+      setError(t("Could not load people."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -149,18 +151,19 @@ export function PeopleScreen({ navigation }: Props) {
         !query ||
         person.name.toLowerCase().includes(query) ||
         person.phone?.toLowerCase().includes(query) ||
-        person.relation_type.includes(query);
+        person.relation_type.includes(query) ||
+        t(relations.find((item) => item.value === person.relation_type)?.label ?? "Other").toLowerCase().includes(query);
 
       if (!matchesQuery) return false;
       if (activeTab === "owes_me") return owed > 0;
       if (activeTab === "i_owe") return owe > 0;
       return true;
     });
-  }, [activeTab, ledgerFor, people, search]);
+  }, [activeTab, ledgerFor, people, search, t]);
 
   const savePerson = async () => {
     if (!name.trim()) {
-      setError("Name is required.");
+      setError(t("Name is required."));
       return;
     }
 
@@ -178,7 +181,7 @@ export function PeopleScreen({ navigation }: Props) {
       setShowAddForm(false);
       await load();
     } catch {
-      setError("Could not save person.");
+      setError(t("Could not save person."));
     } finally {
       setSaving(false);
     }
@@ -205,17 +208,17 @@ export function PeopleScreen({ navigation }: Props) {
 
   const saveDebt = async () => {
     if (!selectedPerson || !user) {
-      setError("Login session is missing. Please reopen the app.");
+      setError(t("Login session is missing. Please reopen the app."));
       return;
     }
 
     const amount = Number(debtAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Amount must be greater than 0.");
+      setError(t("Amount must be greater than 0."));
       return;
     }
 
-    const title = debtTitle.trim() || (debtMode === "owes_me" ? `${selectedPerson.name} owes me` : `I owe ${selectedPerson.name}`);
+    const title = debtTitle.trim() || t(debtMode === "owes_me" ? "{name} owes me" : "I owe {name}", { name: selectedPerson.name });
 
     setSaving(true);
     setError("");
@@ -243,7 +246,7 @@ export function PeopleScreen({ navigation }: Props) {
       await load();
       await openPerson(selectedPerson);
     } catch {
-      setError("Could not save this entry.");
+      setError(t("Could not save this entry."));
     } finally {
       setSaving(false);
     }
@@ -251,7 +254,7 @@ export function PeopleScreen({ navigation }: Props) {
 
   const settleBalance = async (amountOverride?: number) => {
     if (!selectedPerson || !user) {
-      setError("Login session is missing. Please reopen the app.");
+      setError(t("Login session is missing. Please reopen the app."));
       return;
     }
 
@@ -260,15 +263,15 @@ export function PeopleScreen({ navigation }: Props) {
     const amount = amountOverride ?? Number(settleAmount);
 
     if (!shares.length || available <= 0) {
-      setError("No pending balance to settle for this direction.");
+      setError(t("No pending balance to settle for this direction."));
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Settlement amount must be greater than 0.");
+      setError(t("Settlement amount must be greater than 0."));
       return;
     }
     if (amount > available) {
-      setError(`Settlement can be at most ${formatCurrencyCompact(available)}.`);
+      setError(t("Settlement can be at most {amount}.", { amount: formatCurrencyCompact(available) }));
       return;
     }
 
@@ -283,7 +286,7 @@ export function PeopleScreen({ navigation }: Props) {
           amount: nextAmount.toFixed(2),
           expense_share: share.id,
           method: "upi",
-          note: settleMode === "owes_me" ? `${selectedPerson.name} paid me` : `I paid ${selectedPerson.name}`,
+          note: t(settleMode === "owes_me" ? "{name} paid me" : "I paid {name}", { name: selectedPerson.name }),
           status: "completed",
         });
         remaining = Number((remaining - nextAmount).toFixed(2));
@@ -292,7 +295,7 @@ export function PeopleScreen({ navigation }: Props) {
       await load();
       await openPerson(selectedPerson);
     } catch {
-      setError("Could not update this balance.");
+      setError(t("Could not update this balance."));
     } finally {
       setSettling(false);
     }
@@ -300,10 +303,10 @@ export function PeopleScreen({ navigation }: Props) {
 
   const confirmDeletePerson = () => {
     if (!selectedPerson) return;
-    Alert.alert("Remove person", "This removes the person from your people list. Existing linked dues may be affected.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Remove person"), t("This removes the person from your people list. Existing linked dues may be affected."), [
+      { text: t("Cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("Remove"),
         style: "destructive",
         onPress: async () => {
           setSaving(true);
@@ -313,7 +316,7 @@ export function PeopleScreen({ navigation }: Props) {
             setSelectedPerson(null);
             await load();
           } catch {
-            setError("Could not remove person.");
+            setError(t("Could not remove person."));
           } finally {
             setSaving(false);
           }
@@ -330,27 +333,27 @@ export function PeopleScreen({ navigation }: Props) {
   return (
     <AppScreen>
       <View style={styles.header}>
-        <IconButton accessibilityLabel="Go back" icon="arrow-left" onPress={() => navigation.goBack()} />
+        <IconButton accessibilityLabel={t("Go back")} icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
-          <AppText variant="title">People</AppText>
+          <AppText variant="title">{t("People")}</AppText>
         </View>
-        <IconButton accessibilityLabel={searchOpen ? "Close search" : "Search people"} icon={searchOpen ? "close" : "magnify"} onPress={() => setSearchOpen((current) => !current)} />
+        <IconButton accessibilityLabel={t(searchOpen ? "Close search" : "Search people")} icon={searchOpen ? "close" : "magnify"} onPress={() => setSearchOpen((current) => !current)} />
       </View>
 
       <View style={styles.heroRow}>
-        <BalanceTile amount={totals.owesMe} icon="trending-up" label="Owes you" tone="success" />
-        <BalanceTile amount={totals.iOwe} icon="trending-down" label="You owe" tone="danger" />
+        <BalanceTile amount={totals.owesMe} icon="trending-up" label={t("Owes you")} tone="success" />
+        <BalanceTile amount={totals.iOwe} icon="trending-down" label={t("You owe")} tone="danger" />
       </View>
 
       <AppButton icon="account-plus-outline" onPress={() => setShowAddForm(true)}>
-        Add person
+        {t("Add person")}
       </AppButton>
 
       {searchOpen ? (
         <FormField
           autoCapitalize="none"
           onChangeText={setSearch}
-          placeholder="Search by name, phone or relation"
+          placeholder={t("Search by name, phone or relation")}
           style={styles.searchField}
           value={search}
         />
@@ -358,9 +361,9 @@ export function PeopleScreen({ navigation }: Props) {
 
       <ErrorState text={error} />
 
-      <AppSegmentedControl accessibilityLabel="People filter" items={tabs} onChange={setActiveTab} style={styles.tabs} value={activeTab} />
+      <AppSegmentedControl accessibilityLabel={t("People filter")} items={tabs.map((item) => ({ ...item, label: t(item.label) }))} onChange={setActiveTab} style={styles.tabs} value={activeTab} />
 
-      <SectionHeader title={`People (${filteredPeople.length})`} />
+      <SectionHeader title={t("People ({count})", { count: filteredPeople.length })} />
       {loading && !filteredPeople.length ? (
         <SkeletonList rows={3} />
       ) : filteredPeople.length ? (
@@ -435,19 +438,20 @@ function AddPersonSheet({
   saving: boolean;
   visible: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <AppBottomSheet
-      footer={<AppButton block disabled={saving} loading={saving} onPress={onSave}>Save person</AppButton>}
+      footer={<AppButton block disabled={saving} loading={saving} onPress={onSave}>{t("Save person")}</AppButton>}
       onClose={onClose}
-      title="Add person"
+      title={t("Add person")}
       visible={visible}
     >
       <View style={styles.addPreview}>
-        <Avatar name={name || "New"} size={64} />
+        <Avatar name={name || t("New")} size={64} />
       </View>
-      <FormField label="Name" onChangeText={onNameChange} placeholder="Rahul, Mom, Roommate" style={styles.field} value={name} />
+      <FormField label={t("Name")} onChangeText={onNameChange} placeholder={t("Rahul, Mom, Roommate")} style={styles.field} value={name} />
       <AppText color="textMuted" style={styles.fieldLabel} variant="label">
-        Relation
+        {t("Relation")}
       </AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {relations.map((item) => (
@@ -455,7 +459,7 @@ function AddPersonSheet({
             active={relation === item.value}
             icon={item.icon}
             key={item.value}
-            label={item.label}
+            label={t(item.label)}
             onPress={() => onRelationChange(item.value)}
           />
         ))}
@@ -514,19 +518,20 @@ function Avatar({ name, size = 48 }: { name: string; size?: number }) {
 
 function PersonRow({ ledger, onPress, person }: { ledger: PersonLedger; onPress: () => void; person: Person }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const owed = parseAmount(ledger.total_owed_to_me);
   const owe = parseAmount(ledger.total_i_owe);
   const status =
     owed > 0
-      ? { color: colors.success, text: `Owes you ${formatCurrencyCompact(owed)}` }
+      ? { color: colors.success, text: t("Owes you {amount}", { amount: formatCurrencyCompact(owed) }) }
       : owe > 0
-        ? { color: colors.danger, text: `You owe ${formatCurrencyCompact(owe)}` }
+        ? { color: colors.danger, text: t("You owe {amount}", { amount: formatCurrencyCompact(owe) }) }
         : ledger.settlements_count > 0
-          ? { color: colors.textSubtle, text: "Settled" }
-          : { color: colors.textSubtle, text: "No dues" };
+          ? { color: colors.textSubtle, text: t("Settled") }
+          : { color: colors.textSubtle, text: t("No dues") };
 
   return (
-    <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress}>
+    <Pressable accessibilityLabel={`${person.name}. ${status.text}`} accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={onPress}>
       <View style={[styles.personRow, { borderBottomColor: colors.border }]}>
         <Avatar name={person.name} />
         <View style={styles.personText}>
@@ -591,6 +596,7 @@ function PersonDetail({
   settling: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   return (
     <View style={styles.detailPanel}>
       <View style={styles.detailHeader}>
@@ -598,73 +604,73 @@ function PersonDetail({
         <View style={styles.detailIdentity}>
           <AppText variant="headline">{person.name}</AppText>
           <AppText color="textMuted" style={styles.capitalize} variant="caption">
-            {person.relation_type}
+            {t(relations.find((item) => item.value === person.relation_type)?.label ?? "Other")}
           </AppText>
         </View>
-        <IconButton accessibilityLabel="Remove person" icon="trash-can-outline" onPress={onDelete} tone="danger" />
-        <IconButton accessibilityLabel="Close person detail" icon="close" onPress={onClose} />
+        <IconButton accessibilityLabel={t("Remove person")} icon="trash-can-outline" onPress={onDelete} tone="danger" />
+        <IconButton accessibilityLabel={t("Close person detail")} icon="close" onPress={onClose} />
       </View>
 
       <View style={styles.ledgerRow}>
-        <LedgerValue label="Owes you" tone="success" value={ledger.total_owed_to_me} />
-        <LedgerValue label="You owe" tone="danger" value={ledger.total_i_owe} />
+        <LedgerValue label={t("Owes you")} tone="success" value={ledger.total_owed_to_me} />
+        <LedgerValue label={t("You owe")} tone="danger" value={ledger.total_i_owe} />
       </View>
 
       <AppCard style={styles.detailActionCard}>
         <View style={styles.actionCardHeader}>
           <View>
-            <AppText variant="bodyStrong">Add entry</AppText>
-            <AppText color="textMuted" variant="caption">Create a new due with {person.name}.</AppText>
+            <AppText variant="bodyStrong">{t("Add entry")}</AppText>
+            <AppText color="textMuted" variant="caption">{t("Create a new due with {name}.", { name: person.name })}</AppText>
           </View>
           <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.textMuted} />
         </View>
         <View style={styles.debtModeRow}>
-          <CategoryChip active={debtMode === "owes_me"} icon="arrow-down-left" label="They owe me" onPress={() => onDebtModeChange("owes_me")} />
-          <CategoryChip active={debtMode === "i_owe"} icon="arrow-up-right" label="I owe them" onPress={() => onDebtModeChange("i_owe")} />
+          <CategoryChip active={debtMode === "owes_me"} icon="arrow-down-left" label={t("They owe me")} onPress={() => onDebtModeChange("owes_me")} />
+          <CategoryChip active={debtMode === "i_owe"} icon="arrow-up-right" label={t("I owe them")} onPress={() => onDebtModeChange("i_owe")} />
         </View>
-        <FormField keyboardType="decimal-pad" label="Amount" onChangeText={onDebtAmountChange} placeholder="0" style={styles.field} value={debtAmount} />
-        <FormField label="Reason optional" onChangeText={onDebtTitleChange} placeholder="Tea, cab, groceries" style={styles.field} value={debtTitle} />
+        <FormField keyboardType="decimal-pad" label={t("Amount")} onChangeText={onDebtAmountChange} placeholder="0" style={styles.field} value={debtAmount} />
+        <FormField label={t("Reason optional")} onChangeText={onDebtTitleChange} placeholder={t("Tea, cab, groceries")} style={styles.field} value={debtTitle} />
         <AppButton disabled={saving} loading={saving} onPress={onSaveDebt}>
-          Save entry
+          {t("Save entry")}
         </AppButton>
       </AppCard>
 
       <AppCard style={styles.detailActionCard}>
         <View style={styles.actionCardHeader}>
           <View>
-            <AppText variant="bodyStrong">Record payment</AppText>
+            <AppText variant="bodyStrong">{t("Record payment")}</AppText>
             <AppText color="textMuted" variant="caption">
-              {settleAvailable > 0 ? `Available ${formatCurrencyCompact(settleAvailable)}` : "No pending amount in this direction"}
+              {settleAvailable > 0 ? t("Available {amount}", { amount: formatCurrencyCompact(settleAvailable) }) : t("No pending amount in this direction")}
             </AppText>
           </View>
           <MaterialCommunityIcons name="cash-check" size={22} color={colors.textMuted} />
         </View>
         <View style={styles.debtModeRow}>
-          <CategoryChip active={settleMode === "owes_me"} icon="cash-plus" label="They paid me" onPress={() => onSettleModeChange("owes_me")} />
-          <CategoryChip active={settleMode === "i_owe"} icon="cash-minus" label="I paid them" onPress={() => onSettleModeChange("i_owe")} />
+          <CategoryChip active={settleMode === "owes_me"} icon="cash-plus" label={t("They paid me")} onPress={() => onSettleModeChange("owes_me")} />
+          <CategoryChip active={settleMode === "i_owe"} icon="cash-minus" label={t("I paid them")} onPress={() => onSettleModeChange("i_owe")} />
         </View>
         <FormField
           keyboardType="decimal-pad"
-          label="Amount paid"
+          label={t("Amount paid")}
           onChangeText={onSettleAmountChange}
-          placeholder={settleAvailable > 0 ? `Up to ${formatCurrencyCompact(settleAvailable)}` : "0"}
+          placeholder={settleAvailable > 0 ? t("Up to {amount}", { amount: formatCurrencyCompact(settleAvailable) }) : "0"}
           style={styles.field}
           value={settleAmount}
         />
         <View style={styles.settleActions}>
           <AppButton disabled={settling || settleAvailable <= 0} loading={settling} onPress={onSettleBalance} style={styles.settleActionButton}>
-            Save payment
+            {t("Save payment")}
           </AppButton>
           <AppButton disabled={settling || settleAvailable <= 0} onPress={onSettleAll} style={styles.settleActionButton} variant="secondary">
-            Settle all
+            {t("Settle all")}
           </AppButton>
         </View>
       </AppCard>
 
       <AppCard style={styles.historyPanel}>
         <View style={styles.actionCardHeader}>
-          <AppText variant="bodyStrong">History</AppText>
-          <AppText color="textSubtle" variant="caption">{history.length} entries</AppText>
+          <AppText variant="bodyStrong">{t("History")}</AppText>
+          <AppText color="textSubtle" variant="caption">{t("{count} entries", { count: history.length })}</AppText>
         </View>
         {historyLoading ? (
           <PersonHistorySkeleton />
@@ -673,7 +679,7 @@ function PersonDetail({
         ) : (
           <View style={styles.historyEmpty}>
             <MaterialCommunityIcons name="history" size={24} color={colors.textMuted} />
-            <AppText color="textMuted" variant="body">No history with this person yet.</AppText>
+            <AppText color="textMuted" variant="body">{t("No history with this person yet.")}</AppText>
           </View>
         )}
       </AppCard>
@@ -711,9 +717,10 @@ function LedgerValue({ label, tone, value }: { label: string; tone: "danger" | "
 
 function HistoryRow({ expense, person }: { expense: Expense; person: Person }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const paidByPerson = expense.paid_by_person === person.id;
   const tone = paidByPerson ? colors.danger : colors.success;
-  const direction = paidByPerson ? "You owe" : "Owes you";
+  const direction = t(paidByPerson ? "You owe" : "Owes you");
   return (
     <ListRow
       amount={formatCurrencyCompact(expense.amount)}
@@ -726,18 +733,19 @@ function HistoryRow({ expense, person }: { expense: Expense; person: Person }) {
 }
 
 function EmptyPeople({ onAdd }: { onAdd: () => void }) {
+  const { t } = useI18n();
   return (
     <AppCard>
       <View style={styles.emptyPeople}>
         <MaterialCommunityIcons name="account-group-outline" size={36} color="#64748B" />
         <AppText style={styles.emptyTitle} variant="headline">
-          No people yet
+          {t("No people yet")}
         </AppText>
         <AppText color="textMuted" style={styles.emptyBody} variant="body">
-          Add people you share daily expenses with. No email invites required.
+          {t("Add people you share daily expenses with. No email invites required.")}
         </AppText>
         <AppButton icon="account-plus-outline" onPress={onAdd} variant="secondary">
-          Add person
+          {t("Add person")}
         </AppButton>
       </View>
     </AppCard>

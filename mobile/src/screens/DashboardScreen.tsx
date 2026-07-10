@@ -5,6 +5,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import {
+  AppBottomSheet,
+  AppButton,
   AppCard,
   AppCandleChart,
   AppScreen,
@@ -20,6 +22,7 @@ import {
   dsSpace,
   useDs,
 } from "../design-system";
+import { AbstractAvatar, type AbstractAvatarKey } from "../components/AbstractAvatar";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
@@ -76,7 +79,7 @@ function buildDailySpendCandles(expenses: Expense[], month: string, maxBars = 12
 
 export function DashboardScreen({ navigation }: Props) {
   const { colors } = useDs();
-  const { themeMode } = useAppSettings();
+  const { avatarKey, t, themeMode } = useAppSettings();
   const { user } = useAuth();
   const [month] = useState(getCurrentMonth());
   const [data, setData] = useState<DashboardSummary | null>(null);
@@ -84,6 +87,7 @@ export function DashboardScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [accountTrayOpen, setAccountTrayOpen] = useState(false);
 
   const displayName = getDisplayName(user?.first_name, user?.email);
   const recentExpenses = useMemo(
@@ -140,7 +144,16 @@ export function DashboardScreen({ navigation }: Props) {
           <AppText color="textMuted" variant="caption">{getGreeting()}, {displayName}</AppText>
           <AppText variant="title">Home</AppText>
         </View>
-        <IconButton accessibilityLabel="Open settings" icon="cog-outline" onPress={() => navigation.navigate("Profile")} />
+        <Pressable
+          accessibilityLabel={t("Open account menu")}
+          accessibilityRole="button"
+          android_ripple={{ color: colors.press, borderless: true }}
+          hitSlop={8}
+          onPress={() => setAccountTrayOpen(true)}
+          style={styles.avatarButton}
+        >
+          <AbstractAvatar size={44} variant={avatarKey} />
+        </Pressable>
       </View>
 
       <ErrorState text={error} />
@@ -187,7 +200,7 @@ export function DashboardScreen({ navigation }: Props) {
             <View style={styles.quickGrid}>
               <QuickAction icon="plus-circle-outline" label="Expense" onPress={() => navigation.navigate("ExpenseForm")} />
               <QuickAction icon="calendar-clock" label="Bills" onPress={() => navigation.navigate("Bills")} />
-              <QuickAction icon="account-group-outline" label="People" onPress={() => navigation.navigate("People")} />
+              <QuickAction icon="target" label="Goals" onPress={() => navigation.navigate("Goals")} />
               <QuickAction icon="chart-bar" label="Reports" onPress={() => navigation.navigate("Reports")} />
             </View>
           </AppCard>
@@ -223,7 +236,87 @@ export function DashboardScreen({ navigation }: Props) {
           )}
         </>
       )}
+
+      <AccountTray
+        avatarKey={avatarKey}
+        email={user?.email}
+        name={user?.first_name || displayName}
+        navigation={navigation}
+        onClose={() => setAccountTrayOpen(false)}
+        visible={accountTrayOpen}
+      />
     </AppScreen>
+  );
+}
+
+function AccountTray({
+  avatarKey,
+  email,
+  name,
+  navigation,
+  onClose,
+  visible,
+}: {
+  avatarKey: AbstractAvatarKey;
+  email?: string;
+  name: string;
+  navigation: Props["navigation"];
+  onClose: () => void;
+  visible: boolean;
+}) {
+  const { colors } = useDs();
+  const { t } = useAppSettings();
+  const open = (route: "Goals" | "Profile") => {
+    onClose();
+    navigation.navigate(route);
+  };
+
+  return (
+    <AppBottomSheet maxHeight="78%" onClose={onClose} visible={visible}>
+      <View style={styles.accountTrayContent}>
+        <View style={styles.accountTrayCloseRow}>
+          <View />
+          <IconButton accessibilityLabel={t("Close account menu")} icon="close" onPress={onClose} />
+        </View>
+
+        <View style={styles.accountIdentity}>
+          <AbstractAvatar size={88} variant={avatarKey} />
+          <AppText numberOfLines={1} style={styles.accountName} variant="title">
+            {name}
+          </AppText>
+          <AppText color="textSubtle" numberOfLines={1} variant="body">
+            {email || "Personal expense account"}
+          </AppText>
+        </View>
+
+        <AppButton block icon="cog-outline" onPress={() => open("Profile")} style={styles.accountPrimaryAction} variant="secondary">
+          Profile & settings
+        </AppButton>
+
+        <View style={[styles.accountContext, { backgroundColor: colors.chipBg, borderColor: colors.border }]}>
+          <View style={[styles.accountContextIcon, { backgroundColor: colors.surface }]}>
+            <MaterialCommunityIcons color={colors.accent} name="wallet-outline" size={22} />
+          </View>
+          <View style={styles.accountContextCopy}>
+            <AppText variant="bodyStrong">Personal tracker</AppText>
+            <AppText color="textSubtle" variant="caption">Your spending stays private to this account.</AppText>
+          </View>
+        </View>
+
+        <View style={[styles.accountLinks, { borderTopColor: colors.border }]}>
+          <Pressable accessibilityRole="button" android_ripple={{ color: colors.press }} onPress={() => open("Goals")} style={styles.accountLink}>
+            <View style={[styles.accountLinkIcon, { backgroundColor: colors.chipBg }]}>
+              <MaterialCommunityIcons color={colors.text} name="target" size={22} />
+            </View>
+            <View style={styles.accountLinkCopy}>
+              <AppText variant="bodyStrong">Goals</AppText>
+              <AppText color="textSubtle" variant="caption">Targets, progress, and monthly plans</AppText>
+            </View>
+            <MaterialCommunityIcons color={colors.textSubtle} name="chevron-right" size={22} />
+          </Pressable>
+        </View>
+      </View>
+    </AppBottomSheet>
   );
 }
 
@@ -310,6 +403,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  accountContext: {
+    alignItems: "center",
+    borderRadius: dsRadius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: dsSpace[1.5],
+    marginBottom: dsSpace[2],
+    padding: dsSpace[1.5],
+  },
+  accountContextCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  accountContextIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  accountIdentity: {
+    alignItems: "center",
+    marginBottom: dsSpace[2.5],
+  },
+  accountLink: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: dsSpace[1.5],
+    minHeight: 72,
+  },
+  accountLinkCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  accountLinkIcon: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  accountLinks: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: -dsSpace[2],
+    paddingHorizontal: dsSpace[2],
+    paddingTop: dsSpace[1],
+  },
+  accountName: {
+    marginTop: dsSpace[1.5],
+  },
+  accountPrimaryAction: {
+    marginBottom: dsSpace[1.5],
+  },
+  accountTrayCloseRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: dsSpace[1],
+  },
+  accountTrayContent: {
+    paddingHorizontal: dsSpace[2],
+    paddingBottom: dsSpace[2],
+  },
+  avatarButton: {
+    borderRadius: dsRadius.pill,
+    overflow: "hidden",
   },
   header: {
     alignItems: "center",

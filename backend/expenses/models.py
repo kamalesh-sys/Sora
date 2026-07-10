@@ -742,3 +742,135 @@ class BillOccurrence(models.Model):
 
     def __str__(self):
         return f"{self.recurring_bill} - {self.due_date}"
+
+
+class Goal(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="goals",
+        on_delete=models.CASCADE,
+    )
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+    target_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    target_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    template_key = models.CharField(max_length=50, blank=True)
+    icon = models.CharField(max_length=50, blank=True)
+    color = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "target_date", "id"]
+        indexes = [
+            models.Index(fields=["user", "status", "target_date"]),
+            models.Index(fields=["user", "target_date"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(target_amount__gt=0),
+                name="goal_target_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=(Q(status="active") & Q(completed_at__isnull=True))
+                | (Q(status="completed") & Q(completed_at__isnull=False)),
+                name="goal_completion_state_consistent",
+            ),
+        ]
+
+    def clean(self):
+        if self.status == self.Status.ACTIVE and self.completed_at is not None:
+            raise ValidationError("An active goal cannot have a completion time.")
+        if self.status == self.Status.COMPLETED and self.completed_at is None:
+            raise ValidationError("A completed goal must have a completion time.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        from .services.goals import synchronize_goal_completion
+
+        synchronize_goal_completion(self)
+
+    def __str__(self):
+        return self.name
+
+
+class GoalContribution(models.Model):
+    goal = models.ForeignKey(
+        Goal,
+        related_name="contributions",
+        on_delete=models.CASCADE,
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    contribution_date = models.DateField()
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-contribution_date", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["goal", "contribution_date"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0),
+                name="goal_contribution_amount_positive",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        from .services.goals import synchronize_goal_completion
+
+        synchronize_goal_completion(self.goal)
+
+    def delete(self, *args, **kwargs):
+        goal = self.goal
+        result = super().delete(*args, **kwargs)
+        from .services.goals import synchronize_goal_completion
+
+        synchronize_goal_completion(goal)
+        return result
+
+    def __str__(self):
+        return f"{self.goal} - {self.amount}"
+
+
+class GoalMonthSkip(models.Model):
+    goal = models.ForeignKey(
+        Goal,
+        related_name="skipped_months",
+        on_delete=models.CASCADE,
+    )
+    month = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["month", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["goal", "month"],
+                name="unique_goal_skipped_month",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.month:
+            self.month = self.month.replace(day=1)
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.goal} - {self.month:%Y-%m}"

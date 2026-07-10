@@ -60,7 +60,10 @@ export function clearApiCache() {
 
 function firstMessage(value: unknown): string {
   if (!value) return "";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return /<\/?(?:!doctype|html|head|body|title|h1)\b/i.test(trimmed) ? "" : trimmed;
+  }
   if (Array.isArray(value)) {
     return firstMessage(value[0]);
   }
@@ -82,6 +85,7 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = firstMessage(error.response?.data);
     if (message) return message;
+    if (error.response?.status === 404) return "This feature is not available on the server yet. Update the server and try again.";
     if (error.code === "ECONNABORTED") return "Request timed out. Try again.";
     if (!error.response) return "Could not reach the server. Check your connection.";
   }

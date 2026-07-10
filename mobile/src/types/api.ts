@@ -337,3 +337,87 @@ export type HouseholdMonthlyReport = {
 export type ShareSummary = {
   text: string;
 };
+
+export type GoalStatus = "active" | "completed";
+export type GoalHealthStatus = "on_track" | "at_risk" | "overdue" | "completed";
+
+export type GoalTemplate = {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  suggested_months: number;
+};
+
+export type GoalContribution = {
+  id: number;
+  amount: string;
+  contribution_date: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GoalSkippedMonth = {
+  id: number;
+  month: string;
+  created_at: string;
+};
+
+export type Goal = {
+  id: number;
+  name: string;
+  description: string;
+  template_key: string;
+  icon: string;
+  color: string;
+  target_amount: string;
+  target_date: string;
+  saved_amount: string;
+  remaining_amount: string;
+  progress_percent: string | number;
+  required_monthly_contribution: string;
+  status: GoalStatus;
+  remaining_month_count: number;
+  expected_saved_amount: string;
+  shortfall_amount: string;
+  health_status: GoalHealthStatus;
+  can_skip_current_month: boolean;
+  completed_at: string | null;
+  contributions: GoalContribution[];
+  skipped_months: GoalSkippedMonth[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type SaveGoalPayload = {
+  name: string;
+  description?: string;
+  target_amount: string;
+  target_date: string;
+  template_key?: string;
+  icon?: string;
+  color?: string;
+};
+
+export type AddGoalContributionPayload = {
+  amount: string;
+  contribution_date: string;
+  note?: string;
+};
+
+export type AddGoalContributionResult = {
+  goal: Goal;
+  contribution: GoalContribution;
+  just_completed: boolean;
+};
+
+export type SkipGoalResult = {
+  goal: Goal;
+  skip: GoalSkippedMonth;
+};
+
+export type GoalMutationResult = {
+  goal: Goal;
+};

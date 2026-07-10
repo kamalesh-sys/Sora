@@ -8,16 +8,24 @@
     "userInterfaceStyle": "automatic",
     "scheme": "soraexpense",
     "jsEngine": "hermes",
+    "icon": "./src/assets/sora-og-logo-1024.png",
     "splash": {
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F8F7F3",
+      "resizeMode": "contain"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
+      "icon": "./src/assets/sora-og-logo-1024.png",
       "supportsTablet": true
     },
     "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F8F7F3",
+        "foregroundImage": "./src/assets/sora-og-logo-1024.png"
+      },
+      "icon": "./src/assets/sora-og-logo-1024.png",
       "package": "com.soraexpense.app"
     },
     "plugins": [
@@ -52,7 +60,8 @@
           ]
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-localization"
     ]
   }
 }

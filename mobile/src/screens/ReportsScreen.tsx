@@ -23,6 +23,7 @@ import {
 } from "../design-system";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
+import { Translate, useI18n } from "../i18n";
 import { getCategories, getMonthlySummary } from "../services/expenseApi";
 import { exportMonthlyReport } from "../services/reportExport";
 import { getCategoryVisual } from "../theme/soraTheme";
@@ -36,18 +37,19 @@ function shiftMonth(value: string, offset: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function getComparison(current: MonthlySummary | null | undefined, previous: MonthlySummary | null | undefined, month: string) {
+function getComparison(current: MonthlySummary | null | undefined, previous: MonthlySummary | null | undefined, month: string, t: Translate) {
   const currentTotal = parseAmount(current?.total_expense);
   const previousTotal = parseAmount(previous?.total_expense);
-  if (!previousTotal) return `${formatMonthLabel(month)} spend: ${formatCurrencyCompact(currentTotal)}`;
+  if (!previousTotal) return t("{month} spend: {amount}", { amount: formatCurrencyCompact(currentTotal), month: formatMonthLabel(month) });
   const change = ((currentTotal - previousTotal) / previousTotal) * 100;
-  return `${change >= 0 ? "Up" : "Down"} ${Math.abs(change).toFixed(0)}% vs last month`;
+  return t(change >= 0 ? "Up {percent}% vs last month" : "Down {percent}% vs last month", { percent: Math.abs(change).toFixed(0) });
 }
 
 export function ReportsScreen() {
   const { colors } = useDs();
   const { themeMode } = useAppSettings();
   const { token } = useAuth();
+  const { t } = useI18n();
   const [month, setMonth] = useState(getCurrentMonth());
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
@@ -59,7 +61,7 @@ export function ReportsScreen() {
 
   const load = useCallback(async () => {
     if (!isValidMonth(month)) {
-      setError("Month must use YYYY-MM format.");
+      setError(t("Month must use YYYY-MM format."));
       setLoading(false);
       return;
     }
@@ -75,11 +77,11 @@ export function ReportsScreen() {
       setPreviousSummary(previous);
       setCategories(categoryRows);
     } catch {
-      setError("Could not load report. Pull to retry.");
+      setError(t("Could not load report. Pull to retry."));
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,11 +118,11 @@ export function ReportsScreen() {
 
   const exportReport = async (type: "csv" | "pdf") => {
     if (!token) {
-      setError("Login required.");
+      setError(t("Login required."));
       return;
     }
     if (!isValidMonth(month)) {
-      setError("Month must use YYYY-MM format.");
+      setError(t("Month must use YYYY-MM format."));
       return;
     }
 
@@ -130,7 +132,7 @@ export function ReportsScreen() {
       await exportMonthlyReport({ month, token, type });
       setShowExport(false);
     } catch {
-      setError(`Could not export ${type.toUpperCase()} report.`);
+      setError(t("Could not export {type} report.", { type: type.toUpperCase() }));
     } finally {
       setExporting(null);
     }
@@ -141,9 +143,9 @@ export function ReportsScreen() {
       <View style={styles.header}>
         <View style={styles.headerText}>
           <AppText color="textMuted" variant="caption">{formatMonthLabel(month)}</AppText>
-          <AppText variant="title">Reports</AppText>
+          <AppText variant="title">{t("Reports")}</AppText>
         </View>
-        <IconButton accessibilityLabel="Export report" icon={showExport ? "close" : "file-export-outline"} onPress={() => setShowExport((current) => !current)} />
+        <IconButton accessibilityLabel={t("Export report")} icon={showExport ? "close" : "file-export-outline"} onPress={() => setShowExport((current) => !current)} />
       </View>
 
       <ErrorState text={error} />
@@ -151,8 +153,8 @@ export function ReportsScreen() {
       {showExport ? (
         <AppCard>
           <View style={styles.cardHeader}>
-            <AppText variant="headline">Export</AppText>
-            <AppText color="textSubtle" variant="caption">{summary?.expense_count ?? 0} expenses</AppText>
+            <AppText variant="headline">{t("Export")}</AppText>
+            <AppText color="textSubtle" variant="caption">{t((summary?.expense_count ?? 0) === 1 ? "{count} expense" : "{count} expenses", { count: summary?.expense_count ?? 0 })}</AppText>
           </View>
           <View style={styles.actionRow}>
             <AppButton compact icon="file-pdf-box" loading={exporting === "pdf"} onPress={() => exportReport("pdf")} variant="secondary">PDF</AppButton>
@@ -168,37 +170,37 @@ export function ReportsScreen() {
           <AppCard elevated style={[styles.primaryCard, { backgroundColor: primaryCardBackground, borderColor: primaryCardBackground }]}>
             <View style={styles.primaryTop}>
               <View>
-                <AppText style={{ color: primaryCardMuted }} variant="caption">Total spent</AppText>
+                <AppText style={{ color: primaryCardMuted }} variant="caption">{t("Total spent")}</AppText>
                 <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(total)}</AppText>
               </View>
               <View style={[styles.primaryIcon, { backgroundColor: primaryIconBackground }]}>
                 <MaterialCommunityIcons name="chart-line" size={24} color="#FFFFFF" />
               </View>
             </View>
-            <AppText style={{ color: primaryCardMuted }} variant="body">{getComparison(summary, previousSummary, month)}</AppText>
+            <AppText style={{ color: primaryCardMuted }} variant="body">{getComparison(summary, previousSummary, month, t)}</AppText>
           </AppCard>
 
           <AppCard>
             <View style={styles.monthRow}>
-              <FormField autoCapitalize="none" label="Month" onChangeText={setMonth} placeholder="YYYY-MM" style={styles.monthInput} value={month} />
-              <AppButton compact icon="refresh" onPress={load} style={styles.monthLoadButton} variant="secondary">Load</AppButton>
+              <FormField autoCapitalize="none" label={t("Month")} onChangeText={setMonth} placeholder="YYYY-MM" style={styles.monthInput} value={month} />
+              <AppButton compact icon="refresh" onPress={load} style={styles.monthLoadButton} variant="secondary">{t("Load")}</AppButton>
             </View>
           </AppCard>
 
           <View style={styles.metricGrid}>
-            <Metric label="Budget" value={formatCurrencyCompact(budget)} meta={budget > 0 ? `${budgetUsed}% used` : "Not set"} />
-            <Metric label="Balance" value={formatCurrencyCompact(balance)} meta={balance >= 0 ? "Remaining" : "Exceeded"} tone={balance < 0 ? "danger" : "success"} />
+            <Metric label={t("Budget")} value={formatCurrencyCompact(budget)} meta={budget > 0 ? t("{percent}% used", { percent: budgetUsed }) : t("Not set")} />
+            <Metric label={t("Balance")} value={formatCurrencyCompact(balance)} meta={t(balance >= 0 ? "Remaining" : "Exceeded")} tone={balance < 0 ? "danger" : "success"} />
           </View>
 
           <AppCard>
             <View style={styles.cardHeader}>
-              <AppText variant="headline">Where it went</AppText>
-              <AppText color="textSubtle" variant="caption">{summary?.expense_count ?? 0} expenses</AppText>
+              <AppText variant="headline">{t("Where it went")}</AppText>
+              <AppText color="textSubtle" variant="caption">{t((summary?.expense_count ?? 0) === 1 ? "{count} expense" : "{count} expenses", { count: summary?.expense_count ?? 0 })}</AppText>
             </View>
-            {chartRows.length ? <SoraDonutChart rows={chartRows} size={168} /> : <EmptyState body="Hmm, waiting for expenses to build a category chart." icon="chart-donut" title="No breakdown yet" />}
+            {chartRows.length ? <SoraDonutChart rows={chartRows} size={168} /> : <EmptyState body={t("Hmm, waiting for expenses to build a category chart.")} icon="chart-donut" title={t("No breakdown yet")} />}
           </AppCard>
 
-          <SectionHeader title="Categories" />
+          <SectionHeader title={t("Categories")} />
           {(summary?.category_breakdown ?? []).length ? (
             <AppCard style={styles.listCard}>
               {summary?.category_breakdown.map((row) => {
@@ -206,7 +208,7 @@ export function ReportsScreen() {
                 return (
                   <ListRow
                     amount={formatCurrencyCompact(row.total)}
-                    description={`${row.count} expenses`}
+                    description={t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}
                     icon={visual.icon}
                     iconColor={visual.color}
                     key={`${row.category_id}-${row.category_name}`}
@@ -216,16 +218,16 @@ export function ReportsScreen() {
               })}
             </AppCard>
           ) : (
-            <EmptyState body="Hmm, waiting for category spending." icon="shape-outline" title="No categories yet" />
+            <EmptyState body={t("Hmm, waiting for category spending.")} icon="shape-outline" title={t("No categories yet")} />
           )}
 
-          <SectionHeader title="Payments" />
+          <SectionHeader title={t("Payments")} />
           {(summary?.payment_method_breakdown ?? []).length ? (
             <AppCard style={styles.listCard}>
               {summary?.payment_method_breakdown.map((row) => (
                 <ListRow
                   amount={formatCurrencyCompact(row.total)}
-                  description={`${row.count} expenses`}
+                  description={t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}
                   icon={row.payment_method === "cash" ? "cash" : row.payment_method === "card" ? "credit-card-outline" : row.payment_method === "bank" ? "bank-outline" : "cellphone"}
                   key={row.payment_method}
                   title={formatPaymentMethod(row.payment_method)}
@@ -233,7 +235,7 @@ export function ReportsScreen() {
               ))}
             </AppCard>
           ) : (
-            <EmptyState body="Hmm, waiting for UPI or cash entries." icon="wallet-outline" title="No payments yet" />
+            <EmptyState body={t("Hmm, waiting for UPI or cash entries.")} icon="wallet-outline" title={t("No payments yet")} />
           )}
         </>
       )}

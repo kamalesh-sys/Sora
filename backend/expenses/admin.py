@@ -6,6 +6,9 @@ from .models import (
     Expense,
     ExpenseCategory,
     ExpenseShare,
+    Goal,
+    GoalContribution,
+    GoalMonthSkip,
     Household,
     HouseholdMember,
     MonthlyBudget,
@@ -154,3 +157,51 @@ class SignupOTPAdmin(admin.ModelAdmin):
     search_fields = ["email"]
     list_filter = ["consumed_at", "created_at"]
     readonly_fields = ["email", "code_hash", "attempts", "expires_at", "consumed_at", "created_at"]
+
+
+class GoalContributionInline(admin.TabularInline):
+    model = GoalContribution
+    extra = 0
+    readonly_fields = ["created_at", "updated_at"]
+
+
+class GoalMonthSkipInline(admin.TabularInline):
+    model = GoalMonthSkip
+    extra = 0
+    readonly_fields = ["created_at"]
+
+
+@admin.register(Goal)
+class GoalAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "user",
+        "target_amount",
+        "target_date",
+        "status",
+        "template_key",
+        "completed_at",
+    ]
+    search_fields = ["name", "description", "user__email", "user__username"]
+    list_filter = ["status", "template_key", "target_date"]
+    readonly_fields = ["status", "completed_at", "created_at", "updated_at"]
+    date_hierarchy = "target_date"
+    inlines = [GoalContributionInline, GoalMonthSkipInline]
+
+
+@admin.register(GoalContribution)
+class GoalContributionAdmin(admin.ModelAdmin):
+    list_display = ["goal", "amount", "contribution_date", "created_at"]
+    search_fields = ["goal__name", "goal__user__email", "note"]
+    list_filter = ["contribution_date", "created_at"]
+    readonly_fields = ["created_at", "updated_at"]
+    date_hierarchy = "contribution_date"
+
+
+@admin.register(GoalMonthSkip)
+class GoalMonthSkipAdmin(admin.ModelAdmin):
+    list_display = ["goal", "month", "created_at"]
+    search_fields = ["goal__name", "goal__user__email"]
+    list_filter = ["month", "created_at"]
+    readonly_fields = ["created_at"]
+    date_hierarchy = "month"

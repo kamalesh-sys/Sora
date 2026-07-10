@@ -8,6 +8,7 @@ import {
   AppButton,
   AppCard,
   AppScreen,
+  AppSegmentedControl,
   AppText,
   IconButton,
   ListRow,
@@ -18,6 +19,8 @@ import {
 } from "../design-system";
 import { AccentName, ThemeMode, accentOptions, useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
+import { AbstractAvatar, abstractAvatarOptions, type AbstractAvatarKey } from "../components/AbstractAvatar";
+import { languageOptions, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Profile" | "Settings">;
@@ -40,12 +43,17 @@ const moneyNotes = [
 
 export function ProfileScreen({ navigation }: Props) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const {
     accentColor,
     accentName,
+    avatarKey,
     customAccentColor,
+    language,
     setAccentName,
+    setAvatarKey,
     setCustomAccentColor,
+    setLanguage,
     setThemeMode,
     themeMode,
   } = useAppSettings();
@@ -61,9 +69,9 @@ export function ProfileScreen({ navigation }: Props) {
   };
 
   const confirmLogout = () => {
-    Alert.alert("Logout", "You will need to sign in again.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: logout },
+    Alert.alert(t("Logout"), t("You will need to sign in again."), [
+      { text: t("Cancel"), style: "cancel" },
+      { text: t("Logout"), style: "destructive", onPress: logout },
     ]);
   };
 
@@ -71,36 +79,44 @@ export function ProfileScreen({ navigation }: Props) {
     <AppScreen>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <AppText variant="title">Settings</AppText>
-          <AppText color="textSubtle" variant="caption">Account, theme and app preferences</AppText>
+          <AppText variant="title">{t("Settings")}</AppText>
+          <AppText color="textSubtle" variant="caption">{t("Account, theme and app preferences")}</AppText>
         </View>
-        <IconButton accessibilityLabel="Close settings" icon="close" onPress={() => navigation.goBack()} />
+        <IconButton accessibilityLabel={t("Close settings")} icon="close" onPress={() => navigation.goBack()} />
       </View>
 
       <AppCard>
         <View style={styles.accountRow}>
-          <View style={[styles.avatar, { backgroundColor: accentColor }]}>
-            <AppText style={styles.avatarText} variant="headline">{(user?.first_name || user?.email || "S").slice(0, 1).toUpperCase()}</AppText>
-          </View>
+          <AbstractAvatar size={56} variant={avatarKey} />
           <View style={styles.accountText}>
-            <AppText numberOfLines={1} variant="headline">{user?.first_name || "Sora user"}</AppText>
-            <AppText color="textSubtle" numberOfLines={1} variant="caption">{user?.email || "No email"}</AppText>
+            <AppText numberOfLines={1} variant="headline">{user?.first_name || t("Sora user")}</AppText>
+            <AppText color="textSubtle" numberOfLines={1} variant="caption">{user?.email || t("No email")}</AppText>
           </View>
         </View>
       </AppCard>
 
-      <SectionHeader title="Appearance" />
+      <SectionHeader title={t("Profile avatar")} />
       <AppCard>
-        <AppText color="textMuted" style={styles.label} variant="label">Theme</AppText>
+        <AppText color="textMuted" style={styles.label} variant="label">{t("Choose an avatar")}</AppText>
+        <View style={styles.avatarGrid}>
+          {abstractAvatarOptions.map((option) => (
+            <AvatarOption active={avatarKey === option} key={option} onPress={() => setAvatarKey(option)} option={option} />
+          ))}
+        </View>
+      </AppCard>
+
+      <SectionHeader title={t("Appearance")} />
+      <AppCard>
+        <AppText color="textMuted" style={styles.label} variant="label">{t("Theme")}</AppText>
         <View style={styles.modeRow}>
           {(["light", "dark"] as ThemeMode[]).map((mode) => (
             <AppButton key={mode} onPress={() => setThemeMode(mode)} style={styles.modeButton} variant={themeMode === mode ? "primary" : "secondary"}>
-              {mode === "light" ? "Light" : "Dark"}
+              {t(mode === "light" ? "Light" : "Dark")}
             </AppButton>
           ))}
         </View>
 
-        <AppText color="textMuted" style={styles.label} variant="label">Accent</AppText>
+        <AppText color="textMuted" style={styles.label} variant="label">{t("Accent")}</AppText>
         <View style={styles.colorGrid}>
           {accentOptions.map((option) => (
             <ColorDot
@@ -128,7 +144,7 @@ export function ProfileScreen({ navigation }: Props) {
         {customPickerOpen ? (
           <View style={[styles.colorPickerPanel, { borderColor: colors.border }]}>
             <View style={styles.colorPickerHeader}>
-              <AppText variant="bodyStrong">Custom color</AppText>
+              <AppText variant="bodyStrong">{t("Custom color")}</AppText>
               <View style={[styles.colorPreview, { backgroundColor: draftCustomColor }]} />
             </View>
             <ColorPicker
@@ -146,28 +162,55 @@ export function ProfileScreen({ navigation }: Props) {
         ) : null}
       </AppCard>
 
-      <SectionHeader title="Manage" />
+      <SectionHeader title={t("Language")} />
       <AppCard>
-        <ListRow description="Create, edit and seed defaults" icon="tag-multiple-outline" onPress={() => navigation.navigate("Categories")} title="Categories" />
-        <ListRow description="People, balances and history" icon="account-multiple-outline" onPress={() => navigation.navigate("People")} title="People" />
-        <ListRow description="CSV and PDF are available from Reports" icon="file-export-outline" onPress={() => navigation.navigate("Reports")} title="Export data" />
+        <AppText color="textMuted" style={styles.label} variant="label">{t("App language")}</AppText>
+        <AppSegmentedControl
+          accessibilityLabel={t("App language")}
+          items={languageOptions.map((option) => ({ label: option.label, value: option.language }))}
+          onChange={setLanguage}
+          value={language}
+        />
       </AppCard>
 
-      <SectionHeader title="Money notes" />
+      <SectionHeader title={t("Manage")} />
+      <AppCard>
+        <ListRow description={t("Targets, contributions and monthly plans")} icon="target" onPress={() => navigation.navigate("Goals")} title={t("Goals")} />
+        <ListRow description={t("Create, edit and seed defaults")} icon="tag-multiple-outline" onPress={() => navigation.navigate("Categories")} title={t("Categories")} />
+        <ListRow description={t("People, balances and history")} icon="account-multiple-outline" onPress={() => navigation.navigate("People")} title={t("People")} />
+        <ListRow description={t("CSV and PDF are available from Reports")} icon="file-export-outline" onPress={() => navigation.navigate("Reports")} title={t("Export data")} />
+      </AppCard>
+
+      <SectionHeader title={t("Money notes")} />
       {moneyNotes.map((note) => (
         <AppCard key={note.title}>
-          <AppText variant="bodyStrong">{note.title}</AppText>
-          <AppText color="textMuted" style={styles.noteText} variant="body">{note.text}</AppText>
+          <AppText variant="bodyStrong">{t(note.title)}</AppText>
+          <AppText color="textMuted" style={styles.noteText} variant="body">{t(note.text)}</AppText>
         </AppCard>
       ))}
 
-      <SectionHeader title="About" />
+      <SectionHeader title={t("About")} />
       <AppCard>
-        <ListRow description={`Version ${appVersion}`} icon="information-outline" title="Sora Expense" />
+        <ListRow description={`${t("Version")} ${appVersion}`} icon="information-outline" title="Sora Expense" />
       </AppCard>
 
-      <AppButton onPress={confirmLogout} variant="danger">Logout</AppButton>
+      <AppButton onPress={confirmLogout} variant="danger">{t("Logout")}</AppButton>
     </AppScreen>
+  );
+}
+
+function AvatarOption({ active, onPress, option }: { active: boolean; onPress: () => void; option: AbstractAvatarKey }) {
+  const { colors } = useDs();
+  return (
+    <Pressable
+      accessibilityLabel={`Use ${option} avatar`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.avatarOption, { borderColor: active ? colors.accent : colors.border, backgroundColor: colors.surface }]}
+    >
+      <AbstractAvatar size={44} variant={option} />
+      {active ? <View style={[styles.avatarCheck, { backgroundColor: colors.accent }]}><MaterialCommunityIcons color="#FFFFFF" name="check" size={12} /></View> : null}
+    </Pressable>
   );
 }
 
@@ -206,15 +249,31 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  avatar: {
+  avatarCheck: {
     alignItems: "center",
-    borderRadius: dsRadius.pill,
-    height: 56,
+    borderColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 2,
+    bottom: -3,
+    height: 20,
     justifyContent: "center",
-    width: 56,
+    position: "absolute",
+    right: -3,
+    width: 20,
   },
-  avatarText: {
-    color: "#FFFFFF",
+  avatarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: dsSpace[1],
+  },
+  avatarOption: {
+    alignItems: "center",
+    borderRadius: dsRadius.md,
+    borderWidth: 1,
+    height: 60,
+    justifyContent: "center",
+    position: "relative",
+    width: 60,
   },
   colorDot: {
     alignItems: "center",

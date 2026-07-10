@@ -30,7 +30,7 @@ export function SoraDonutChart({
   rows: DonutChartRow[];
   size?: number;
 }) {
-  const { colors } = useAppSettings();
+  const { colors, t } = useAppSettings();
   const strokeWidth = Math.max(18, Math.round(size * 0.13));
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
@@ -42,7 +42,7 @@ export function SoraDonutChart({
   if (!total) {
     return (
       <View style={styles.emptyChart}>
-        <Text style={[styles.emptyText, { color: colors.muted }]}>No spending data for chart.</Text>
+        <Text style={[styles.emptyText, { color: colors.muted }]}>{t("No spending data for chart.")}</Text>
       </View>
     );
   }
@@ -84,7 +84,7 @@ export function SoraDonutChart({
         </Svg>
         <View style={styles.chartCenter}>
           <Text style={[styles.centerAmount, { color: colors.text }]}>{formatCurrencyCompact(total)}</Text>
-          <Text style={[styles.centerLabel, { color: colors.muted }]}>Total</Text>
+          <Text style={[styles.centerLabel, { color: colors.muted }]}>{t("Total")}</Text>
         </View>
       </View>
 
@@ -100,7 +100,8 @@ export function SoraDonutChart({
                   {row.label}
                 </Text>
                 <Text style={[styles.legendMeta, { color: colors.muted }]}>
-                  {formatCurrencyCompact(value)} - {percent}%{row.count ? ` - ${row.count} expenses` : ""}
+                  {formatCurrencyCompact(value)} - {percent}%
+                  {row.count ? ` - ${t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}` : ""}
                 </Text>
               </View>
             </View>

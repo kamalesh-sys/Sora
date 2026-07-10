@@ -1,10 +1,24 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import { configureFonts, MD3DarkTheme, MD3LightTheme } from "react-native-paper";
+
+import {
+  AppLanguage,
+  createTranslator,
+  getDeviceLanguage,
+  isAppLanguage,
+  localeTags,
+  setActiveLanguage,
+  Translate,
+} from "../i18n/catalogs";
+import { abstractAvatarOptions, type AbstractAvatarKey } from "../components/AbstractAvatar";
 
 const THEME_MODE_KEY = "sora_expense_theme_mode";
 const ACCENT_KEY = "sora_expense_accent";
 const CUSTOM_ACCENT_KEY = "sora_expense_custom_accent";
+const LANGUAGE_KEY = "sora_expense_language";
+const AVATAR_KEY = "sora_expense_avatar";
 
 const baseInterFonts = configureFonts({
   config: {
@@ -31,6 +45,11 @@ const interFonts = {
   titleMedium: { ...baseInterFonts.titleMedium, fontFamily: "Inter_700Bold", fontWeight: "700" as const },
   titleSmall: { ...baseInterFonts.titleSmall, fontFamily: "Inter_700Bold", fontWeight: "700" as const },
 };
+
+const systemFontFamily = Platform.select({ android: "sans-serif", ios: "System", default: "System" });
+const systemFonts = Object.fromEntries(
+  Object.entries(interFonts).map(([name, config]) => [name, { ...config, fontFamily: systemFontFamily }])
+) as typeof interFonts;
 
 export type ThemeMode = "light" | "dark";
 export type AccentName =
@@ -70,12 +89,19 @@ export type AppColors = {
 type AppSettingsContextValue = {
   accentName: AccentName;
   accentColor: string;
+  avatarKey: AbstractAvatarKey;
   customAccentColor: string;
   colors: AppColors;
+  language: AppLanguage;
+  locale: string;
   paperTheme: typeof MD3LightTheme;
   setAccentName: (nextAccent: AccentName) => void;
+  setAvatarKey: (nextAvatar: AbstractAvatarKey) => void;
   setCustomAccentColor: (nextColor: string) => void;
+  setLanguage: (nextLanguage: AppLanguage) => void;
   setThemeMode: (nextMode: ThemeMode) => void;
+  settingsReady: boolean;
+  t: Translate;
   themeMode: ThemeMode;
 };
 
@@ -124,18 +150,27 @@ function isAccentName(value: string | null): value is AccentName {
   return value === "custom" || accentOptions.some((item) => item.name === value);
 }
 
+function isAvatarKey(value: string | null): value is AbstractAvatarKey {
+  return abstractAvatarOptions.some((item) => item === value);
+}
+
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>("light");
   const [accentName, setAccentNameState] = useState<AccentName>("blue");
   const [customAccentColor, setCustomAccentColorState] = useState("#0052ff");
+  const [language, setLanguageState] = useState<AppLanguage>(() => getDeviceLanguage());
+  const [avatarKey, setAvatarKeyState] = useState<AbstractAvatarKey>("orbit");
+  const [settingsReady, setSettingsReady] = useState(false);
 
   useEffect(() => {
     async function restoreSettings() {
       try {
-        const [savedThemeMode, savedAccent, savedCustomAccent] = await Promise.all([
+        const [savedThemeMode, savedAccent, savedCustomAccent, savedLanguage, savedAvatar] = await Promise.all([
           SecureStore.getItemAsync(THEME_MODE_KEY),
           SecureStore.getItemAsync(ACCENT_KEY),
           SecureStore.getItemAsync(CUSTOM_ACCENT_KEY),
+          SecureStore.getItemAsync(LANGUAGE_KEY),
+          SecureStore.getItemAsync(AVATAR_KEY),
         ]);
 
         if (isThemeMode(savedThemeMode)) {
@@ -147,8 +182,17 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         if (savedCustomAccent && /^#[0-9a-fA-F]{6}$/.test(savedCustomAccent)) {
           setCustomAccentColorState(savedCustomAccent);
         }
+        if (isAppLanguage(savedLanguage)) {
+          setLanguageState(savedLanguage);
+          setActiveLanguage(savedLanguage);
+        }
+        if (isAvatarKey(savedAvatar)) {
+          setAvatarKeyState(savedAvatar);
+        }
       } catch {
-        // Theme preferences are non-critical. Keep defaults if secure storage is unavailable.
+        // Display preferences are non-critical. Keep device-aware defaults if storage is unavailable.
+      } finally {
+        setSettingsReady(true);
       }
     }
 
@@ -157,6 +201,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const accent = getAccentColor(accentName, customAccentColor);
   const colors = useMemo(() => getColors(themeMode, accent), [accent, themeMode]);
+  const t = useMemo(() => createTranslator(language), [language]);
   const paperTheme = useMemo(() => {
     const baseTheme = themeMode === "dark" ? MD3DarkTheme : MD3LightTheme;
 
@@ -174,16 +219,19 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         outline: colors.border,
         error: colors.danger,
       },
-      fonts: interFonts,
+      fonts: language === "en" ? interFonts : systemFonts,
     };
-  }, [colors, themeMode]);
+  }, [colors, language, themeMode]);
 
   const value = useMemo<AppSettingsContextValue>(
     () => ({
       accentName,
       accentColor: accent,
+      avatarKey,
       customAccentColor,
       colors,
+      language,
+      locale: localeTags[language],
       paperTheme,
       setAccentName: (nextAccent) => {
         setAccentNameState(nextAccent);
@@ -195,13 +243,24 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         SecureStore.setItemAsync(CUSTOM_ACCENT_KEY, nextColor).catch(() => undefined);
         SecureStore.setItemAsync(ACCENT_KEY, "custom").catch(() => undefined);
       },
+      setAvatarKey: (nextAvatar) => {
+        setAvatarKeyState(nextAvatar);
+        SecureStore.setItemAsync(AVATAR_KEY, nextAvatar).catch(() => undefined);
+      },
+      setLanguage: (nextLanguage) => {
+        setLanguageState(nextLanguage);
+        setActiveLanguage(nextLanguage);
+        SecureStore.setItemAsync(LANGUAGE_KEY, nextLanguage).catch(() => undefined);
+      },
       setThemeMode: (nextMode) => {
         setThemeModeState(nextMode);
         SecureStore.setItemAsync(THEME_MODE_KEY, nextMode).catch(() => undefined);
       },
+      settingsReady,
+      t,
       themeMode,
     }),
-    [accent, accentName, colors, customAccentColor, paperTheme, themeMode]
+    [accent, accentName, avatarKey, colors, customAccentColor, language, paperTheme, settingsReady, t, themeMode]
   );
 
   return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;

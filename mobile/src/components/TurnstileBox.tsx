@@ -101,7 +101,7 @@ function buildHtml(theme: "light" | "dark") {
 }
 
 export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
-  const { themeMode } = useAppSettings();
+  const { t, themeMode } = useAppSettings();
   const [webViewKey, setWebViewKey] = useState(0);
   const html = useMemo(() => buildHtml(themeMode), [themeMode, resetKey]);
   const baseUrl = useMemo(getBaseUrl, []);
@@ -121,15 +121,15 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
 
       if (payload.type === "expired") {
         onToken("");
-        onError("Human verification expired. Try again.");
+        onError(t("Human verification expired. Try again."));
         return;
       }
 
       onToken("");
-      onError("Human verification failed to load. Try again.");
+      onError(t("Human verification failed to load. Try again."));
     } catch {
       onToken("");
-      onError("Human verification failed. Try again.");
+      onError(t("Human verification failed. Try again."));
     }
   };
 
@@ -147,15 +147,15 @@ export function TurnstileBox({ resetKey, token, onError, onToken }: Props) {
         onMessage={handleMessage}
         onError={() => {
           onToken("");
-          onError("Human verification could not load. Check your connection and try again.");
+          onError(t("Human verification could not load. Check your connection and try again."));
         }}
         onHttpError={() => {
           onToken("");
-          onError("Human verification could not load. Check your connection and try again.");
+          onError(t("Human verification could not load. Check your connection and try again."));
         }}
         onRenderProcessGone={() => {
           onToken("");
-          onError("Human verification reloaded. Try again.");
+          onError(t("Human verification reloaded. Try again."));
           setWebViewKey((current) => current + 1);
         }}
         originWhitelist={["*"]}

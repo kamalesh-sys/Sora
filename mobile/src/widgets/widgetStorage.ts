@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import type { WidgetInfo, WidgetRepresentation } from "react-native-android-widget";
 
 import type { Expense } from "../types/api";
+import { getActiveLanguage, isAppLanguage, translate } from "../i18n/catalogs";
 import { formatCurrencyCompact, formatPaymentMethod, formatRelativeDateLabel } from "../utils/format";
 import type { SoraExpenseWidgetData } from "./widgetTypes";
 
@@ -17,21 +18,28 @@ const emptyWidgetData: SoraExpenseWidgetData = {
   category: "",
   dateLabel: "",
   hasExpense: false,
+  language: getActiveLanguage(),
   paymentMethod: "",
   title: "No expense yet",
 };
 
+function getEmptyWidgetData(): SoraExpenseWidgetData {
+  return { ...emptyWidgetData, language: getActiveLanguage() };
+}
+
 function toWidgetData(expense?: Expense | null): SoraExpenseWidgetData {
+  const language = getActiveLanguage();
   if (!expense) {
-    return emptyWidgetData;
+    return getEmptyWidgetData();
   }
 
   return {
-    amount: formatCurrencyCompact(expense.amount),
-    category: expense.category_detail?.name ?? "Uncategorized",
-    dateLabel: formatRelativeDateLabel(expense.expense_date),
+    amount: formatCurrencyCompact(expense.amount, language),
+    category: expense.category_detail?.name ?? translate(language, "Uncategorized"),
+    dateLabel: formatRelativeDateLabel(expense.expense_date, language),
     hasExpense: true,
-    paymentMethod: formatPaymentMethod(expense.payment_method),
+    language,
+    paymentMethod: formatPaymentMethod(expense.payment_method, language),
     title: expense.title,
   };
 }
@@ -40,11 +48,16 @@ export async function getStoredWidgetData() {
   try {
     const raw = await AsyncStorage.getItem(WIDGET_STORAGE_KEY);
     if (!raw) {
-      return emptyWidgetData;
+      return getEmptyWidgetData();
     }
-    return { ...emptyWidgetData, ...JSON.parse(raw) } as SoraExpenseWidgetData;
+    const parsed = JSON.parse(raw) as Partial<SoraExpenseWidgetData>;
+    return {
+      ...getEmptyWidgetData(),
+      ...parsed,
+      language: isAppLanguage(parsed.language) ? parsed.language : getActiveLanguage(),
+    } as SoraExpenseWidgetData;
   } catch {
-    return emptyWidgetData;
+    return getEmptyWidgetData();
   }
 }
 

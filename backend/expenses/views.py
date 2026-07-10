@@ -1,8 +1,10 @@
 from datetime import date
 
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -14,6 +16,9 @@ from .models import (
     Expense,
     ExpenseCategory,
     ExpenseShare,
+    Goal,
+    GoalContribution,
+    GoalMonthSkip,
     HouseholdMember,
     MonthlyBudget,
     Person,
@@ -27,6 +32,11 @@ from .serializers import (
     ExpenseCategorySerializer,
     ExpenseSerializer,
     ExpenseShareSerializer,
+    GoalContributionSerializer,
+    GoalMonthSkipCreateSerializer,
+    GoalMonthSkipSerializer,
+    GoalSerializer,
+    GoalTemplateSerializer,
     HouseholdDetailSerializer,
     HouseholdMemberSerializer,
     HouseholdSerializer,
@@ -37,6 +47,7 @@ from .serializers import (
 )
 from .services.budgets import get_category_budget_usage
 from .services.categories import seed_default_categories
+from .services.goals import GOAL_TEMPLATES, get_goal_metrics, month_start, synchronize_goal_completion
 from .services.household_reports import (
     build_household_monthly_report_csv,
     build_household_monthly_report_pdf,
@@ -522,6 +533,162 @@ class BillOccurrenceViewSet(viewsets.ReadOnlyModelViewSet):
     def skip(self, request, pk=None):
         occurrence = mark_occurrence_skipped(request.user, self.get_object())
         return Response(BillOccurrenceSerializer(occurrence).data)
+
+
+class GoalViewSet(viewsets.ModelViewSet):
+    serializer_class = GoalSerializer
+
+    def get_queryset(self):
+        queryset = (
+            Goal.objects.filter(user=self.request.user)
+            .prefetch_related("contributions", "skipped_months")
+            .order_by("status", "target_date", "id")
+        )
+        goal_status = self.request.query_params.get("status")
+        if goal_status:
+            if goal_status not in Goal.Status.values:
+                raise ValidationError(
+                    {"status": f"Status must be one of: {', '.join(Goal.Status.values)}."}
+                )
+            queryset = queryset.filter(status=goal_status)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def _fresh_goal(self, goal_id):
+        return (
+            Goal.objects.filter(user=self.request.user)
+            .prefetch_related("contributions", "skipped_months")
+            .get(pk=goal_id)
+        )
+
+    @action(detail=False, methods=["get"], url_path="templates")
+    def templates(self, request):
+        return Response(GoalTemplateSerializer(GOAL_TEMPLATES, many=True).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="contributions")
+    def contributions(self, request, pk=None):
+        goal = self.get_object()
+        if request.method == "GET":
+            return Response(
+                GoalContributionSerializer(goal.contributions.all(), many=True).data
+            )
+
+        contribution_serializer = GoalContributionSerializer(data=request.data)
+        contribution_serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            locked_goal = Goal.objects.select_for_update().get(pk=goal.pk, user=request.user)
+            was_completed = locked_goal.status == Goal.Status.COMPLETED
+            contribution = contribution_serializer.save(goal=locked_goal)
+            synchronize_goal_completion(locked_goal)
+            locked_goal.refresh_from_db(fields=["status", "completed_at", "updated_at"])
+            just_completed = not was_completed and locked_goal.status == Goal.Status.COMPLETED
+
+        fresh_goal = self._fresh_goal(goal.pk)
+        return Response(
+            {
+                "goal": self.get_serializer(fresh_goal).data,
+                "contribution": GoalContributionSerializer(contribution).data,
+                "just_completed": just_completed,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["patch", "delete"],
+        url_path=r"contributions/(?P<contribution_id>[^/.]+)",
+    )
+    def contribution_detail(self, request, pk=None, contribution_id=None):
+        goal = self.get_object()
+        contribution = goal.contributions.filter(pk=contribution_id).first()
+        if contribution is None:
+            raise ValidationError({"contribution": "Contribution not found."})
+
+        with transaction.atomic():
+            locked_goal = Goal.objects.select_for_update().get(pk=goal.pk, user=request.user)
+            locked_contribution = GoalContribution.objects.select_for_update().get(
+                pk=contribution.pk,
+                goal=locked_goal,
+            )
+            was_completed = locked_goal.status == Goal.Status.COMPLETED
+            if request.method == "DELETE":
+                locked_contribution.delete()
+                synchronize_goal_completion(locked_goal)
+                fresh_goal = self._fresh_goal(goal.pk)
+                return Response({"goal": self.get_serializer(fresh_goal).data})
+
+            contribution_serializer = GoalContributionSerializer(
+                locked_contribution,
+                data=request.data,
+                partial=True,
+            )
+            contribution_serializer.is_valid(raise_exception=True)
+            contribution = contribution_serializer.save()
+            synchronize_goal_completion(locked_goal)
+            locked_goal.refresh_from_db(fields=["status", "completed_at", "updated_at"])
+            just_completed = not was_completed and locked_goal.status == Goal.Status.COMPLETED
+
+        fresh_goal = self._fresh_goal(goal.pk)
+        return Response(
+            {
+                "goal": self.get_serializer(fresh_goal).data,
+                "contribution": GoalContributionSerializer(contribution).data,
+                "just_completed": just_completed,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="skip")
+    def skip_month(self, request, pk=None):
+        goal = self.get_object()
+        input_serializer = GoalMonthSkipCreateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        requested_month = input_serializer.validated_data["month"]
+        current_month = month_start(timezone.localdate())
+
+        if goal.status == Goal.Status.COMPLETED:
+            raise ValidationError({"month": "A completed goal cannot skip a month."})
+        if requested_month < current_month:
+            raise ValidationError({"month": "A past month cannot be skipped."})
+        if requested_month > month_start(goal.target_date):
+            raise ValidationError({"month": "Month must be on or before the target month."})
+        if goal.skipped_months.filter(month=requested_month).exists():
+            raise ValidationError({"month": "This month is already skipped."})
+        if get_goal_metrics(goal).remaining_month_count <= 1:
+            raise ValidationError(
+                {"month": "The final remaining contribution month cannot be skipped."}
+            )
+
+        with transaction.atomic():
+            locked_goal = Goal.objects.select_for_update().get(pk=goal.pk, user=request.user)
+            skipped_month = GoalMonthSkip.objects.create(
+                goal=locked_goal,
+                month=requested_month,
+            )
+
+        fresh_goal = self._fresh_goal(goal.pk)
+        return Response(
+            {
+                "goal": self.get_serializer(fresh_goal).data,
+                "skip": GoalMonthSkipSerializer(skipped_month).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"skips/(?P<skip_id>[^/.]+)",
+    )
+    def skip_detail(self, request, pk=None, skip_id=None):
+        goal = self.get_object()
+        skipped_month = goal.skipped_months.filter(pk=skip_id).first()
+        if skipped_month is None:
+            raise ValidationError({"skip": "Skipped month not found."})
+        skipped_month.delete()
+        fresh_goal = self._fresh_goal(goal.pk)
+        return Response({"goal": self.get_serializer(fresh_goal).data})
 
 
 @api_view(["GET"])

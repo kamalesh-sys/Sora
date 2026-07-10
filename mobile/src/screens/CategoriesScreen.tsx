@@ -20,6 +20,7 @@ import {
   useDs,
 } from "../design-system";
 import { dsRadius, dsSpace, dsTouch } from "../design-system/tokens";
+import { useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { createCategory, deleteCategory, getCategories, seedDefaultCategories, updateCategory } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
@@ -94,6 +95,7 @@ function isHexColor(value: string) {
 }
 
 export function CategoriesScreen({ navigation }: Props) {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -109,11 +111,11 @@ export function CategoriesScreen({ navigation }: Props) {
     try {
       setCategories(await applySavedCategoryOrder(await getCategories()));
     } catch {
-      setError("Could not load categories.");
+      setError(t("Could not load categories."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -153,11 +155,11 @@ export function CategoriesScreen({ navigation }: Props) {
   const save = async () => {
     const cleanName = name.trim();
     if (!cleanName) {
-      setError("Category name is required.");
+      setError(t("Category name is required."));
       return;
     }
     if (!isHexColor(color)) {
-      setError("Choose a valid color.");
+      setError(t("Choose a valid color."));
       return;
     }
 
@@ -173,7 +175,7 @@ export function CategoriesScreen({ navigation }: Props) {
       closeEditor();
       await load();
     } catch {
-      setError("Could not save category. Names must be unique.");
+      setError(t("Could not save category. Names must be unique."));
     } finally {
       setSaving(false);
     }
@@ -186,7 +188,7 @@ export function CategoriesScreen({ navigation }: Props) {
       setCategories(await seedDefaultCategories());
       closeEditor();
     } catch {
-      setError("Could not create default categories.");
+      setError(t("Could not create default categories."));
     } finally {
       setSaving(false);
     }
@@ -194,8 +196,8 @@ export function CategoriesScreen({ navigation }: Props) {
 
   const confirmDelete = () => {
     if (!editingId) return;
-    Alert.alert("Delete category", "Existing expenses will become uncategorized.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("Delete category"), t("Existing expenses will become uncategorized."), [
+      { text: t("Cancel"), style: "cancel" },
       {
         onPress: async () => {
           setSaving(true);
@@ -204,13 +206,13 @@ export function CategoriesScreen({ navigation }: Props) {
             closeEditor();
             await load();
           } catch {
-            setError("Could not delete category.");
+            setError(t("Could not delete category."));
           } finally {
             setSaving(false);
           }
         },
         style: "destructive",
-        text: "Delete",
+        text: t("Delete"),
       },
     ]);
   };
@@ -218,26 +220,26 @@ export function CategoriesScreen({ navigation }: Props) {
   return (
     <AppScreen>
       <View style={styles.header}>
-        <IconButton accessibilityLabel="Go back" icon="arrow-left" onPress={() => navigation.goBack()} />
+        <IconButton accessibilityLabel={t("Go back")} icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
-          <AppText variant="title">Categories</AppText>
+          <AppText variant="title">{t("Categories")}</AppText>
         </View>
-        <IconButton accessibilityLabel="Add category" icon="plus" onPress={openAdd} tone="primary" />
+        <IconButton accessibilityLabel={t("Add category")} icon="plus" onPress={openAdd} tone="primary" />
       </View>
 
       <ErrorState text={error} />
 
       <View style={styles.summaryRow}>
         <AppCard style={styles.summaryCard}>
-          <AppText color="textMuted" variant="caption">Saved</AppText>
-          <AppText variant="headline">{categories.length} categories</AppText>
+          <AppText color="textMuted" variant="caption">{t("Saved")}</AppText>
+          <AppText variant="headline">{t("{count} categories", { count: categories.length })}</AppText>
         </AppCard>
         <AppButton disabled={saving} icon="auto-fix" onPress={seedDefaults} style={styles.defaultsButton} variant="secondary">
-          Defaults
+          {t("Defaults")}
         </AppButton>
       </View>
 
-      <SectionHeader title={`Saved categories (${categories.length})`} />
+      <SectionHeader title={t("Saved categories ({count})", { count: categories.length })} />
       {loading && !categories.length ? (
         <SkeletonList rows={5} />
       ) : categories.length ? (
@@ -248,11 +250,11 @@ export function CategoriesScreen({ navigation }: Props) {
         </AppCard>
       ) : (
         <EmptyState
-          action="Add category"
-          body="Create quick labels for groceries, food, rent, fuel and anything you track often."
+          action={t("Add category")}
+          body={t("Create quick labels for groceries, food, rent, fuel and anything you track often.")}
           icon="shape-outline"
           onAction={openAdd}
-          title="No categories yet"
+          title={t("No categories yet")}
         />
       )}
 
@@ -322,31 +324,32 @@ function CategoryEditorSheet({
   visible: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   const [showIconManager, setShowIconManager] = useState(false);
   const [iconQuery, setIconQuery] = useState("");
   const visibleIcons = useMemo(() => {
     const query = iconQuery.trim().toLowerCase();
     if (!query) return iconOptions;
-    return iconOptions.filter((item) => item.label.toLowerCase().includes(query) || item.icon.includes(query));
-  }, [iconQuery]);
+    return iconOptions.filter((item) => t(item.label).toLowerCase().includes(query) || item.label.toLowerCase().includes(query) || item.icon.includes(query));
+  }, [iconQuery, t]);
 
   return (
     <AppBottomSheet
       footer={
         <View style={styles.sheetActions}>
           <AppButton block disabled={saving} loading={saving} onPress={onSave}>
-            {editing ? "Save category" : "Add category"}
+            {t(editing ? "Save category" : "Add category")}
           </AppButton>
           {editing && onDelete ? (
             <AppButton block disabled={saving} icon="trash-can-outline" onPress={onDelete} variant="danger">
-              Delete category
+              {t("Delete category")}
             </AppButton>
           ) : null}
         </View>
       }
       maxHeight="90%"
       onClose={onClose}
-      title={editing ? "Edit category" : "Add category"}
+      title={t(editing ? "Edit category" : "Add category")}
       visible={visible}
     >
       <View style={styles.editorPreview}>
@@ -355,12 +358,12 @@ function CategoryEditorSheet({
         </View>
       </View>
 
-      <FormField label="Name" onChangeText={onNameChange} placeholder="Kitchen, Petrol, D Mart" style={styles.field} value={name} />
+      <FormField label={t("Name")} onChangeText={onNameChange} placeholder={t("Kitchen, Petrol, D Mart")} style={styles.field} value={name} />
 
       <View style={styles.iconHeader}>
-        <AppText color="textMuted" variant="label">Icon</AppText>
+        <AppText color="textMuted" variant="label">{t("Icon")}</AppText>
         <AppButton compact icon={showIconManager ? "chevron-up" : "view-grid-outline"} onPress={() => setShowIconManager((current) => !current)} variant="secondary">
-          {showIconManager ? "Close" : "Manage"}
+          {t(showIconManager ? "Close" : "Manage")}
         </AppButton>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -369,7 +372,7 @@ function CategoryEditorSheet({
             active={icon === item.icon}
             icon={item.icon}
             key={item.icon}
-            label={item.label}
+            label={t(item.label)}
             onPress={() => onIconChange(item.icon)}
             style={styles.iconChip}
           />
@@ -377,7 +380,7 @@ function CategoryEditorSheet({
       </ScrollView>
       {showIconManager ? (
         <View style={styles.iconManager}>
-          <FormField autoCapitalize="none" label="Search" onChangeText={setIconQuery} placeholder="Food, travel, bills" style={styles.field} value={iconQuery} />
+          <FormField autoCapitalize="none" label={t("Search")} onChangeText={setIconQuery} placeholder={t("Food, travel, bills")} style={styles.field} value={iconQuery} />
           <View style={styles.iconGrid}>
             {visibleIcons.map((item) => (
               <IconOptionButton
@@ -395,11 +398,11 @@ function CategoryEditorSheet({
         </View>
       ) : null}
 
-      <AppText color="textMuted" style={styles.fieldLabel} variant="label">Color</AppText>
+      <AppText color="textMuted" style={styles.fieldLabel} variant="label">{t("Color")}</AppText>
       <View style={styles.colorRow}>
         {colorOptions.map((item) => (
           <Pressable
-            accessibilityLabel={`Select ${item} category color`}
+            accessibilityLabel={t("Select {color} category color", { color: item })}
             accessibilityRole="button"
             accessibilityState={{ selected: color === item }}
             android_ripple={{ color: colors.press, borderless: true }}
@@ -429,8 +432,10 @@ function IconOptionButton({
   selected: boolean;
 }) {
   const { colors } = useDs();
+  const { t } = useI18n();
   return (
     <Pressable
+      accessibilityLabel={t(item.label)}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       android_ripple={{ color: colors.press }}
@@ -445,7 +450,7 @@ function IconOptionButton({
     >
       <MaterialCommunityIcons name={item.icon} size={22} color={selected ? colors.textInverse : colors.text} />
       <AppText numberOfLines={1} style={{ color: selected ? colors.textInverse : colors.text }} variant="caption">
-        {item.label}
+        {t(item.label)}
       </AppText>
     </Pressable>
   );
