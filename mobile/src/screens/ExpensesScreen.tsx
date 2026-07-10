@@ -18,6 +18,7 @@ import {
   ListRow,
   SectionHeader,
   SkeletonList,
+  dsRadius,
   dsSpace,
   useDs,
 } from "../design-system";
@@ -409,6 +410,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     alignItems: "center",
+    borderRadius: dsRadius.lg,
     flexDirection: "row",
     gap: dsSpace[2],
     justifyContent: "space-between",

@@ -338,6 +338,7 @@ const styles = StyleSheet.create({
     gap: dsSpace[1],
   },
   primaryCard: {
+    borderRadius: dsRadius.lg,
     paddingVertical: dsSpace[3],
   },
   primaryIcon: {

@@ -689,14 +689,22 @@ export function AppBottomSheet({
   visible: boolean;
 }) {
   const { colors } = useDs();
-  const { t } = useAppSettings();
+  const { t, themeMode } = useAppSettings();
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.sheetRoot}>
+      <View style={[styles.sheetRoot, { paddingBottom: dsSpace[0.5] }]}>
         <Pressable accessibilityLabel={t("Close sheet")} style={StyleSheet.absoluteFill} onPress={onClose} />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheetKeyboard}>
-          <View style={[styles.sheet, { backgroundColor: colors.surface, maxHeight }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.borderStrong }]} />
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: themeMode === "dark" ? colors.surfaceAlt : colors.surface,
+                borderColor: colors.border,
+                maxHeight,
+              },
+            ]}
+          >
             {title ? (
               <View style={styles.sheetHeader}>
                 <AppText variant="headline">{title}</AppText>
@@ -852,7 +860,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: dsSpace[2],
   },
   card: {
-    borderRadius: dsRadius.sm,
+    borderRadius: dsRadius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: dsSpace[2],
     padding: dsSpace[2],
@@ -989,8 +997,9 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sheet: {
-    borderTopLeftRadius: dsRadius.xl,
-    borderTopRightRadius: dsRadius.xl,
+    ...dsShadow.low,
+    borderRadius: dsRadius.sheet,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: dsSpace[2],
     paddingBottom: dsSpace[2.5],
     width: "100%",
@@ -1000,25 +1009,19 @@ const styles = StyleSheet.create({
     marginTop: dsSpace[1.5],
     paddingTop: dsSpace[1.5],
   },
-  sheetHandle: {
-    alignSelf: "center",
-    borderRadius: dsRadius.pill,
-    height: 4,
-    marginBottom: dsSpace[2],
-    width: 42,
-  },
   sheetHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: dsSpace[2],
+    marginBottom: dsSpace[1],
   },
   sheetKeyboard: {
     justifyContent: "flex-end",
+    paddingHorizontal: dsSpace[1],
     width: "100%",
   },
   sheetRoot: {
-    backgroundColor: "rgba(10,11,13,0.42)",
+    backgroundColor: "rgba(10,11,13,0.62)",
     flex: 1,
     justifyContent: "flex-end",
   },

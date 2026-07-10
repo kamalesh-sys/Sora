@@ -948,6 +948,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroCard: {
+    borderRadius: dsRadius.lg,
     paddingVertical: dsSpace[3],
   },
   heroIcon: {
