@@ -191,9 +191,9 @@ export function GoalsScreen({ navigation }: Props) {
           </AppCard>
           ) : null}
 
-          {templates.length ? (
+          {goals.length && templates.length ? (
             <>
-              <SectionHeader title={goals.length ? "Start another goal" : "Choose a goal template"} />
+              <SectionHeader title="Start another goal" />
               <View style={styles.templateGrid}>
                 {templates.map((template) => (
                   <GoalTemplateCard key={template.key} onPress={() => openEditor(template)} template={template} />
@@ -234,6 +234,7 @@ export function GoalsScreen({ navigation }: Props) {
           ) : (
             <EmptyState
               action="Create goal"
+              actionSpacing="loose"
               icon="target"
               onAction={() => openEditor()}
               title="No goals yet"

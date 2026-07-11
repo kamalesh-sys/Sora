@@ -352,9 +352,6 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             style={styles.typeSwitch}
             value={transactionType}
           />
-          <AppText color="textSubtle" style={styles.typeHelper} variant="caption">
-            {t(transactionType === "income" ? "Income adds money to your wallet." : "Expenses reduce your wallet balance.")}
-          </AppText>
 
           <AmountInput
             autoFocus
@@ -702,13 +699,8 @@ const styles = StyleSheet.create({
   screenContent: {
     paddingBottom: 112,
   },
-  typeHelper: {
-    marginBottom: dsSpace[1.5],
-    marginTop: dsSpace[0.5],
-    textAlign: "center",
-  },
   typeSwitch: {
-    marginBottom: 0,
+    marginBottom: dsSpace[2],
   },
   skeletonChipRow: {
     flexDirection: "row",

@@ -547,12 +547,14 @@ export function ListRow({
 
 export function EmptyState({
   action,
+  actionSpacing = "normal",
   body,
   icon = "receipt-text-outline",
   onAction,
   title,
 }: {
   action?: string;
+  actionSpacing?: "normal" | "loose";
   body?: string;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   onAction?: () => void;
@@ -566,7 +568,11 @@ export function EmptyState({
       </View>
       <AppText style={[styles.stateTitle, styles.centerText]} variant="headline">{title}</AppText>
       {body ? <AppText color="textMuted" style={[styles.stateBody, styles.centerText]} variant="body">{body}</AppText> : null}
-      {action && onAction ? <AppButton onPress={onAction} variant="secondary">{action}</AppButton> : null}
+      {action && onAction ? (
+        <View style={actionSpacing === "loose" ? styles.stateActionLoose : undefined}>
+          <AppButton onPress={onAction} variant="secondary">{action}</AppButton>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1056,6 +1062,9 @@ const styles = StyleSheet.create({
   stateBody: {
     marginBottom: dsSpace[2],
     marginTop: dsSpace[0.5],
+  },
+  stateActionLoose: {
+    marginTop: dsSpace[1.5],
   },
   stateBox: {
     alignItems: "center",
