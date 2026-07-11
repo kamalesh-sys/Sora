@@ -9,6 +9,7 @@ import {
   AppButton,
   AppCard,
   AppScreen,
+  AppSegmentedControl,
   AppText,
   CategoryChip,
   EmptyState,
@@ -24,7 +25,7 @@ import { useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { createCategory, deleteCategory, getCategories, seedDefaultCategories, updateCategory } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
-import type { ExpenseCategory } from "../types/api";
+import type { ExpenseCategory, TransactionType } from "../types/api";
 import { applySavedCategoryOrder } from "../utils/categoryOrder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Categories">;
@@ -89,13 +90,18 @@ const iconOptions: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; l
   { icon: "dots-horizontal", label: "Other" },
 ];
 const pinnedIconOptions = iconOptions.slice(0, 8);
+const categoryTypes: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: TransactionType }> = [
+  { icon: "arrow-up-right", label: "Expense", value: "expense" },
+  { icon: "arrow-down-left", label: "Income", value: "income" },
+];
 
 function isHexColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
-export function CategoriesScreen({ navigation }: Props) {
+export function CategoriesScreen({ navigation, route }: Props) {
   const { t } = useI18n();
+  const [transactionType, setTransactionType] = useState<TransactionType>(route.params?.transactionType ?? "expense");
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -109,13 +115,13 @@ export function CategoriesScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     setError("");
     try {
-      setCategories(await applySavedCategoryOrder(await getCategories()));
+      setCategories(await applySavedCategoryOrder(await getCategories(transactionType), transactionType));
     } catch {
       setError(t("Could not load categories."));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, transactionType]);
 
   useFocusEffect(
     useCallback(() => {
@@ -127,7 +133,7 @@ export function CategoriesScreen({ navigation }: Props) {
   const resetForm = () => {
     setEditingId(null);
     setName("");
-    setIcon("cart-outline");
+    setIcon(transactionType === "income" ? "briefcase-outline" : "cart-outline");
     setColor(colorOptions[0]);
     setError("");
   };
@@ -166,7 +172,7 @@ export function CategoriesScreen({ navigation }: Props) {
     setSaving(true);
     setError("");
     try {
-      const payload = { color, icon, name: cleanName };
+      const payload = { color, icon, name: cleanName, transaction_type: transactionType };
       if (editingId) {
         await updateCategory(editingId, payload);
       } else {
@@ -185,7 +191,7 @@ export function CategoriesScreen({ navigation }: Props) {
     setSaving(true);
     setError("");
     try {
-      setCategories(await seedDefaultCategories());
+      setCategories(await seedDefaultCategories(transactionType));
       closeEditor();
     } catch {
       setError(t("Could not create default categories."));
@@ -196,7 +202,7 @@ export function CategoriesScreen({ navigation }: Props) {
 
   const confirmDelete = () => {
     if (!editingId) return;
-    Alert.alert(t("Delete category"), t("Existing expenses will become uncategorized."), [
+    Alert.alert(t("Delete category"), t("Existing transactions will become uncategorized."), [
       { text: t("Cancel"), style: "cancel" },
       {
         onPress: async () => {
@@ -229,6 +235,19 @@ export function CategoriesScreen({ navigation }: Props) {
 
       <ErrorState text={error} />
 
+      <AppSegmentedControl
+        accessibilityLabel={t("Category type")}
+        items={categoryTypes}
+        onChange={(value) => {
+          closeEditor();
+          setCategories([]);
+          setLoading(true);
+          setTransactionType(value);
+        }}
+        style={styles.typeSwitch}
+        value={transactionType}
+      />
+
       <View style={styles.summaryRow}>
         <AppCard style={styles.summaryCard}>
           <AppText color="textMuted" variant="caption">{t("Saved")}</AppText>
@@ -251,7 +270,7 @@ export function CategoriesScreen({ navigation }: Props) {
       ) : (
         <EmptyState
           action={t("Add category")}
-          body={t("Create quick labels for groceries, food, rent, fuel and anything you track often.")}
+          body={t(transactionType === "income" ? "Create quick labels for salary, business, refunds and money you receive." : "Create quick labels for groceries, food, rent, fuel and anything you track often.")}
           icon="shape-outline"
           onAction={openAdd}
           title={t("No categories yet")}
@@ -574,6 +593,9 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     flexDirection: "row",
     gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
+  typeSwitch: {
     marginBottom: dsSpace[2],
   },
 });

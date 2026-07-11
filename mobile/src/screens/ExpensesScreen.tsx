@@ -9,6 +9,7 @@ import {
   AppBottomSheet,
   AppCard,
   AppScreen,
+  AppSegmentedControl,
   AppText,
   CategoryChip,
   EmptyState,
@@ -25,16 +26,17 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { Translate, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import { getCategories, getExpenses } from "../services/expenseApi";
+import { getCategories, getTransactions } from "../services/expenseApi";
 import { exportMonthlyReport, ReportExportType } from "../services/reportExport";
 import { getCategoryVisual } from "../theme/soraTheme";
-import type { Expense, ExpenseCategory, PaymentMethod } from "../types/api";
+import type { Expense, ExpenseCategory, PaymentMethod, TransactionType } from "../types/api";
 import { getCurrentMonth, isValidMonth } from "../utils/date";
 import { formatCurrencyCompact, formatDateLabel, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Expenses">;
 type PaymentFilter = "all" | PaymentMethod;
 type OrderingFilter = "recent" | "oldest" | "amount_desc" | "amount_asc";
+type TransactionTypeFilter = "all" | TransactionType;
 type ExpenseSection = { data: Expense[]; key: string; title: string };
 
 const paymentOptions: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: PaymentFilter }> = [
@@ -52,6 +54,12 @@ const orderingOptions: Array<{ label: string; value: OrderingFilter }> = [
   { label: "Low", value: "amount_asc" },
 ];
 
+const transactionTypeOptions: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: TransactionTypeFilter }> = [
+  { icon: "swap-vertical", label: "All", value: "all" },
+  { icon: "arrow-up-right", label: "Expense", value: "expense" },
+  { icon: "arrow-down-left", label: "Income", value: "income" },
+];
+
 export function ExpensesScreen({ navigation }: Props) {
   const { colors } = useDs();
   const { token } = useAuth();
@@ -62,6 +70,7 @@ export function ExpensesScreen({ navigation }: Props) {
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [ordering, setOrdering] = useState<OrderingFilter>("recent");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<TransactionTypeFilter>("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,24 +90,28 @@ export function ExpensesScreen({ navigation }: Props) {
 
     setError("");
     try {
-      const [expenseRows, categoryRows] = await Promise.all([
-        getExpenses({
+      const categoryRequests = transactionTypeFilter === "all"
+        ? [getCategories("expense"), getCategories("income")]
+        : [getCategories(transactionTypeFilter)];
+      const [expenseRows, categoryGroups] = await Promise.all([
+        getTransactions({
           category: categoryFilter ?? undefined,
           month: cleanMonth || undefined,
           ordering,
           payment_method: paymentFilter === "all" ? undefined : paymentFilter,
+          transaction_type: transactionTypeFilter === "all" ? undefined : transactionTypeFilter,
         }),
-        getCategories(),
+        Promise.all(categoryRequests),
       ]);
       setExpenses(expenseRows);
-      setCategories(categoryRows);
+      setCategories(categoryGroups.flat());
     } catch {
-      setError(t("Could not load expenses. Pull to retry."));
+      setError(t("Could not load transactions. Pull to retry."));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [categoryFilter, month, ordering, paymentFilter, t]);
+  }, [categoryFilter, month, ordering, paymentFilter, t, transactionTypeFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,7 +120,9 @@ export function ExpensesScreen({ navigation }: Props) {
     }, [expenses.length, load])
   );
 
-  const total = useMemo(() => expenses.reduce((sum, expense) => sum + parseAmount(expense.amount), 0), [expenses]);
+  const totalIncome = useMemo(() => expenses.filter((item) => item.transaction_type === "income").reduce((sum, item) => sum + parseAmount(item.amount), 0), [expenses]);
+  const totalExpense = useMemo(() => expenses.filter((item) => item.transaction_type !== "income").reduce((sum, item) => sum + parseAmount(item.amount), 0), [expenses]);
+  const netCashFlow = totalIncome - totalExpense;
   const groupedExpenses = useMemo(() => groupExpensesByDate(expenses, t), [expenses, t]);
 
   const refresh = () => {
@@ -119,6 +134,7 @@ export function ExpensesScreen({ navigation }: Props) {
     setMonth(getCurrentMonth());
     setCategoryFilter(null);
     setPaymentFilter("all");
+    setTransactionTypeFilter("all");
     setOrdering("recent");
   };
 
@@ -148,12 +164,12 @@ export function ExpensesScreen({ navigation }: Props) {
     <AppScreen bottomNavCurrent="Expenses" onRefresh={refresh} refreshing={refreshing}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <AppText variant="title">{t("Expenses")}</AppText>
+          <AppText variant="title">{t("Transactions")}</AppText>
           <AppText color="textSubtle" variant="caption">
-            {t(expenses.length === 1 ? "{count} expense" : "{count} expenses", { count: expenses.length })} | {formatCurrencyCompact(total)}
+            {t(expenses.length === 1 ? "{count} transaction" : "{count} transactions", { count: expenses.length })}
           </AppText>
         </View>
-        <IconButton accessibilityLabel={t("Export expenses")} icon={showExport ? "close" : "file-export-outline"} onPress={() => {
+        <IconButton accessibilityLabel={t("Export transactions")} icon={showExport ? "close" : "file-export-outline"} onPress={() => {
           setExportMonth(month || getCurrentMonth());
           setShowExport((current) => !current);
         }} />
@@ -162,14 +178,26 @@ export function ExpensesScreen({ navigation }: Props) {
       <ErrorState text={error} />
 
       <AppCard style={[styles.summaryCard, { backgroundColor: colors.accent, borderColor: colors.accent }]}>
-        <View>
+        <View style={styles.summaryText}>
           <AppText style={styles.inverseMuted} variant="label">{month || t("All months")}</AppText>
-          <AppText style={styles.inverseAmount} variant="display">{formatCurrencyCompact(total)}</AppText>
+          <AppText style={styles.inverseAmount} variant="display">{formatCurrencyCompact(netCashFlow)}</AppText>
+          <AppText style={styles.inverseMuted} variant="caption">{t("Net cash flow")}</AppText>
         </View>
         <AppButton icon="filter-variant" onPress={() => setShowFilters((current) => !current)} variant="secondary">
           {t("Filters")}
         </AppButton>
       </AppCard>
+
+      <View style={styles.flowRow}>
+        <AppCard style={styles.flowCard}>
+          <AppText color="textMuted" variant="caption">{t("Income")}</AppText>
+          <AppText color="success" numberOfLines={1} variant="headline">{formatCurrencyCompact(totalIncome)}</AppText>
+        </AppCard>
+        <AppCard style={styles.flowCard}>
+          <AppText color="textMuted" variant="caption">{t("Expenses")}</AppText>
+          <AppText numberOfLines={1} variant="headline">{formatCurrencyCompact(totalExpense)}</AppText>
+        </AppCard>
+      </View>
 
       {showExport ? (
         <AppCard>
@@ -199,7 +227,8 @@ export function ExpensesScreen({ navigation }: Props) {
                 ].filter(Boolean).join(" | ");
                 return (
                   <ListRow
-                    amount={formatCurrencyCompact(expense.amount)}
+                    amount={`${expense.transaction_type === "income" ? "+" : "−"}${formatCurrencyCompact(expense.amount)}`}
+                    amountColor={expense.transaction_type === "income" ? colors.success : colors.text}
                     description={meta}
                     icon={visual.icon}
                     iconColor={visual.color}
@@ -215,11 +244,11 @@ export function ExpensesScreen({ navigation }: Props) {
         ))
       ) : (
         <EmptyState
-          action={t("Add expense")}
-          body={t("Use the plus button and your expenses will be grouped here by date.")}
-          icon="receipt-text-plus-outline"
+          action={t("Add transaction")}
+          body={t("Add income or an expense and it will be grouped here by date.")}
+          icon="swap-vertical"
           onAction={() => navigation.navigate("ExpenseForm")}
-          title={t("No expenses found")}
+          title={t("No transactions found")}
         />
       )}
 
@@ -233,8 +262,13 @@ export function ExpensesScreen({ navigation }: Props) {
         onMonthChange={setMonth}
         onOrderingChange={setOrdering}
         onPaymentChange={setPaymentFilter}
+        onTransactionTypeChange={(value) => {
+          setTransactionTypeFilter(value);
+          setCategoryFilter(null);
+        }}
         ordering={ordering}
         paymentFilter={paymentFilter}
+        transactionTypeFilter={transactionTypeFilter}
         visible={showFilters}
       />
     </AppScreen>
@@ -251,8 +285,10 @@ function ExpenseFilterSheet({
   onMonthChange,
   onOrderingChange,
   onPaymentChange,
+  onTransactionTypeChange,
   ordering,
   paymentFilter,
+  transactionTypeFilter,
   visible,
 }: {
   categories: ExpenseCategory[];
@@ -264,8 +300,10 @@ function ExpenseFilterSheet({
   onMonthChange: (value: string) => void;
   onOrderingChange: (value: OrderingFilter) => void;
   onPaymentChange: (value: PaymentFilter) => void;
+  onTransactionTypeChange: (value: TransactionTypeFilter) => void;
   ordering: OrderingFilter;
   paymentFilter: PaymentFilter;
+  transactionTypeFilter: TransactionTypeFilter;
   visible: boolean;
 }) {
   const { t } = useI18n();
@@ -277,6 +315,14 @@ function ExpenseFilterSheet({
       visible={visible}
     >
       <FormField autoCapitalize="none" label={t("Month")} onChangeText={onMonthChange} placeholder="YYYY-MM" value={month} />
+
+      <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Type")}</AppText>
+      <AppSegmentedControl
+        accessibilityLabel={t("Transaction type filter")}
+        items={transactionTypeOptions}
+        onChange={onTransactionTypeChange}
+        value={transactionTypeFilter}
+      />
 
       <AppText color="textMuted" style={styles.filterLabel} variant="label">{t("Payment")}</AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
@@ -377,6 +423,16 @@ const styles = StyleSheet.create({
     marginBottom: dsSpace[1],
     marginTop: dsSpace[2],
   },
+  flowCard: {
+    flex: 1,
+    marginBottom: 0,
+    minWidth: 0,
+  },
+  flowRow: {
+    flexDirection: "row",
+    gap: dsSpace[1],
+    marginBottom: dsSpace[2],
+  },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -414,5 +470,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[2],
     justifyContent: "space-between",
+  },
+  summaryText: {
+    flex: 1,
+    minWidth: 0,
   },
 });

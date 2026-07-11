@@ -20,7 +20,7 @@ type NavItem = {
 
 const leftItems: NavItem[] = [
   { key: "Home", label: "Home", icon: "home-outline", route: "Home" },
-  { key: "Expenses", label: "Expenses", icon: "receipt-text-outline", route: "Expenses" },
+  { key: "Expenses", label: "Transactions", icon: "swap-vertical", route: "Expenses" },
 ];
 
 const centerItem: NavItem = { key: "Add", label: "Add", icon: "plus", route: "ExpenseForm" };

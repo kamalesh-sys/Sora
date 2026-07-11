@@ -1,12 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { ExpenseCategory } from "../types/api";
+import type { ExpenseCategory, TransactionType } from "../types/api";
 
 export const CATEGORY_ORDER_KEY = "sora_expense_add_expense_category_order";
 
-export async function applySavedCategoryOrder(rows: ExpenseCategory[]) {
+function getCategoryOrderKey(transactionType: TransactionType) {
+  return transactionType === "expense" ? CATEGORY_ORDER_KEY : `${CATEGORY_ORDER_KEY}_income`;
+}
+
+export async function applySavedCategoryOrder(rows: ExpenseCategory[], transactionType: TransactionType = rows[0]?.transaction_type ?? "expense") {
   try {
-    const rawOrder = await AsyncStorage.getItem(CATEGORY_ORDER_KEY);
+    const rawOrder = await AsyncStorage.getItem(getCategoryOrderKey(transactionType));
     const savedIds = rawOrder ? (JSON.parse(rawOrder) as number[]) : [];
     if (!Array.isArray(savedIds) || !savedIds.length) {
       return rows;
@@ -21,6 +25,6 @@ export async function applySavedCategoryOrder(rows: ExpenseCategory[]) {
   }
 }
 
-export async function saveCategoryOrder(rows: ExpenseCategory[]) {
-  await AsyncStorage.setItem(CATEGORY_ORDER_KEY, JSON.stringify(rows.map((item) => item.id)));
+export async function saveCategoryOrder(rows: ExpenseCategory[], transactionType: TransactionType = rows[0]?.transaction_type ?? "expense") {
+  await AsyncStorage.setItem(getCategoryOrderKey(transactionType), JSON.stringify(rows.map((item) => item.id)));
 }

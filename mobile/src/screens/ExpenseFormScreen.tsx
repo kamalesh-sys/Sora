@@ -37,16 +37,16 @@ import { useFeedback } from "../context/FeedbackContext";
 import { Translate, useI18n } from "../i18n";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import {
-  createExpense,
-  deleteExpense,
+  createTransaction,
+  deleteTransaction,
   getCategories,
-  getExpense,
   getExpenses,
+  getTransaction,
   seedDefaultCategories,
-  updateExpense,
+  updateTransaction,
 } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
-import type { CreateExpensePayload, ExpenseCategory, ExpenseVisibility, PaymentMethod } from "../types/api";
+import type { CreateTransactionPayload, ExpenseCategory, ExpenseVisibility, PaymentMethod, TransactionType } from "../types/api";
 import { applySavedCategoryOrder, saveCategoryOrder } from "../utils/categoryOrder";
 import { getTodayDate, isValidDate } from "../utils/date";
 import { formatDateLabel } from "../utils/format";
@@ -61,7 +61,18 @@ const CATEGORY_DRAG_DELAY_MS = 220;
 const paymentModes: Array<{ label: string; value: PaymentMethod }> = [
   { label: "UPI", value: "upi" },
   { label: "Cash", value: "cash" },
+  { label: "Card", value: "card" },
+  { label: "Bank", value: "bank" },
 ];
+
+const transactionTypes: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: TransactionType }> = [
+  { icon: "arrow-up-right", label: "Expense", value: "expense" },
+  { icon: "arrow-down-left", label: "Income", value: "income" },
+];
+
+function recentCategoryKey(transactionType: TransactionType) {
+  return transactionType === "expense" ? RECENT_CATEGORY_KEY : `${RECENT_CATEGORY_KEY}_income`;
+}
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -77,10 +88,11 @@ function fromDateInputValue(value: string) {
   return new Date(`${value}T00:00:00`);
 }
 
-function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod, t: Translate) {
+function getSmartTitle(category: ExpenseCategory | null, paymentMethod: PaymentMethod, transactionType: TransactionType, t: Translate) {
   if (category?.name) {
     return category.name;
   }
+  if (transactionType === "income") return t("Income");
   return t(paymentMethod === "upi" ? "UPI expense" : "Expense");
 }
 
@@ -92,7 +104,7 @@ function sanitizeAmount(value: string) {
 }
 
 function normalizePaymentMethod(value?: string | null): PaymentMethod {
-  return value === "cash" ? "cash" : "upi";
+  return value === "cash" || value === "card" || value === "bank" ? value : "upi";
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -106,8 +118,10 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   const amountRef = useRef<TextInput>(null);
   const expenseId = route.params?.expenseId;
   const isEditing = Boolean(expenseId);
+  const initialTransactionType = route.params?.transactionType ?? "expense";
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [transactionType, setTransactionType] = useState<TransactionType>(initialTransactionType);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
@@ -117,6 +131,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   const [note, setNote] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [amountTouched, setAmountTouched] = useState(false);
@@ -135,50 +150,56 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       const next = [...current];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(clamp(toIndex, 0, next.length), 0, moved);
-      void saveCategoryOrder(next);
+      void saveCategoryOrder(next, transactionType);
       return next;
     });
+  }, [transactionType]);
+
+  const fetchCategories = useCallback(async (type: TransactionType, preferredCategory?: number | null) => {
+    let categoryRows = await getCategories(type);
+    if (!categoryRows.length) {
+      categoryRows = await seedDefaultCategories(type);
+    }
+    categoryRows = await applySavedCategoryOrder(categoryRows, type);
+    setCategories(categoryRows);
+
+    const storedCategory = await AsyncStorage.getItem(recentCategoryKey(type));
+    const recentCategoryId = storedCategory ? Number(storedCategory) : NaN;
+    const preferred = preferredCategory ?? (Number.isFinite(recentCategoryId) ? recentCategoryId : null);
+    setCategory(
+      preferred && categoryRows.some((item) => item.id === preferred)
+        ? preferred
+        : categoryRows[0]?.id ?? null
+    );
   }, []);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const [recentPayment, recentCategory] = await Promise.all([
-        AsyncStorage.getItem(RECENT_PAYMENT_KEY),
-        AsyncStorage.getItem(RECENT_CATEGORY_KEY),
-      ]);
-      let categoryRows = await getCategories();
-      if (!categoryRows.length) {
-        categoryRows = await seedDefaultCategories();
-      }
-      categoryRows = await applySavedCategoryOrder(categoryRows);
-      setCategories(categoryRows);
-
-      const recentCategoryId = recentCategory ? Number(recentCategory) : NaN;
-      if (Number.isFinite(recentCategoryId) && categoryRows.some((item) => item.id === recentCategoryId)) {
-        setCategory(recentCategoryId);
-      } else {
-        setCategory(categoryRows[0]?.id ?? null);
-      }
+      const recentPayment = await AsyncStorage.getItem(RECENT_PAYMENT_KEY);
       setPaymentMethod(normalizePaymentMethod(recentPayment));
 
       if (expenseId) {
-        const expense = await getExpense(expenseId);
-        setAmount(expense.amount);
-        setCategory(expense.category);
-        setPaymentMethod(normalizePaymentMethod(expense.payment_method));
-        setExpenseDate(expense.expense_date);
-        setTitle(expense.title);
-        setNote(expense.note ?? "");
-        setDetailsOpen(Boolean(expense.title || expense.note));
+        const transaction = await getTransaction(expenseId);
+        const type = transaction.transaction_type ?? "expense";
+        setTransactionType(type);
+        await fetchCategories(type, transaction.category);
+        setAmount(transaction.amount);
+        setPaymentMethod(normalizePaymentMethod(transaction.payment_method));
+        setExpenseDate(transaction.expense_date);
+        setTitle(transaction.title);
+        setNote(transaction.note ?? "");
+        setDetailsOpen(Boolean(transaction.title || transaction.note));
+      } else {
+        await fetchCategories(initialTransactionType);
       }
     } catch {
-      setError(t("Could not load expense form."));
+      setError(t("Could not load transaction form."));
     } finally {
       setLoading(false);
       setTimeout(() => amountRef.current?.focus(), 120);
     }
-  }, [expenseId, t]);
+  }, [expenseId, fetchCategories, initialTransactionType, t]);
 
   useEffect(() => {
     load();
@@ -186,17 +207,11 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
 
   const refreshCategories = useCallback(async () => {
     try {
-      let categoryRows = await getCategories();
-      if (!categoryRows.length) {
-        categoryRows = await seedDefaultCategories();
-      }
-      const ordered = await applySavedCategoryOrder(categoryRows);
-      setCategories(ordered);
-      setCategory((current) => (current && ordered.some((item) => item.id === current) ? current : ordered[0]?.id ?? null));
+      await fetchCategories(transactionType, category);
     } catch {
       // Keep the current category rail usable when a background refresh fails.
     }
-  }, []);
+  }, [category, fetchCategories, transactionType]);
 
   useFocusEffect(
     useCallback(() => {
@@ -205,6 +220,21 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       }
     }, [loading, refreshCategories])
   );
+
+  const changeTransactionType = async (nextType: TransactionType) => {
+    if (nextType === transactionType || categoryLoading) return;
+    setTransactionType(nextType);
+    setCategoryLoading(true);
+    setError("");
+    try {
+      await fetchCategories(nextType);
+      void Haptics.selectionAsync();
+    } catch {
+      setError(t("Could not load categories for this transaction type."));
+    } finally {
+      setCategoryLoading(false);
+    }
+  };
 
   const save = async () => {
     setAmountTouched(true);
@@ -220,7 +250,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     setError("");
     try {
       const visibility: ExpenseVisibility = "private";
-      const payload: CreateExpensePayload = {
+      const payload: CreateTransactionPayload = {
         amount: cleanAmount.toFixed(2),
         category,
         expense_date: expenseDate,
@@ -229,25 +259,26 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         note: note.trim(),
         paid_by_user: "me",
         payment_method: paymentMethod,
-        title: title.trim() || getSmartTitle(selectedCategory, paymentMethod, t),
+        title: title.trim() || getSmartTitle(selectedCategory, paymentMethod, transactionType, t),
+        transaction_type: transactionType,
         visibility,
       };
 
       if (expenseId) {
-        await updateExpense(expenseId, payload);
+        await updateTransaction(expenseId, payload);
       } else {
-        await createExpense(payload);
+        await createTransaction(payload);
       }
 
       await Promise.all([
         AsyncStorage.setItem(RECENT_PAYMENT_KEY, paymentMethod),
-        category ? AsyncStorage.setItem(RECENT_CATEGORY_KEY, String(category)) : AsyncStorage.removeItem(RECENT_CATEGORY_KEY),
+        category ? AsyncStorage.setItem(recentCategoryKey(transactionType), String(category)) : AsyncStorage.removeItem(recentCategoryKey(transactionType)),
       ]);
       success();
       void refreshWidgetFromLatestExpense();
       navigation.navigate("Expenses");
     } catch {
-      setError(t("Could not save expense. Check connection and try again."));
+      setError(t("Could not save transaction. Check connection and try again."));
     } finally {
       setSaving(false);
     }
@@ -257,7 +288,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
     if (!expenseId) {
       return;
     }
-    Alert.alert(t("Delete expense"), t("This expense will be removed."), [
+    Alert.alert(t("Delete transaction"), t("This transaction will be removed."), [
       { text: t("Cancel"), style: "cancel" },
       {
         text: t("Delete"),
@@ -266,11 +297,11 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
           setSaving(true);
           setError("");
           try {
-            await deleteExpense(expenseId);
+            await deleteTransaction(expenseId);
             void refreshWidgetFromLatestExpense();
             navigation.navigate("Expenses");
           } catch {
-            setError(t("Could not delete expense."));
+            setError(t("Could not delete transaction."));
           } finally {
             setSaving(false);
           }
@@ -301,11 +332,11 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   return (
     <AppScreen contentStyle={styles.screenContent}>
       <View style={styles.header}>
-        <IconButton accessibilityLabel={t("Close add expense")} icon="close" onPress={() => navigation.goBack()} />
+        <IconButton accessibilityLabel={t("Close add transaction")} icon="close" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
-          <AppText variant="headline">{t(isEditing ? "Edit expense" : "Add expense")}</AppText>
+          <AppText variant="headline">{t(isEditing ? "Edit transaction" : "Add transaction")}</AppText>
         </View>
-        {isEditing ? <IconButton accessibilityLabel={t("Delete expense")} icon="trash-can-outline" onPress={confirmDelete} tone="danger" /> : <View style={styles.headerSpacer} />}
+        {isEditing ? <IconButton accessibilityLabel={t("Delete transaction")} icon="trash-can-outline" onPress={confirmDelete} tone="danger" /> : <View style={styles.headerSpacer} />}
       </View>
 
       <ErrorState text={error} />
@@ -314,6 +345,17 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         <ExpenseFormSkeleton />
       ) : (
         <>
+          <AppSegmentedControl
+            accessibilityLabel={t("Transaction type")}
+            items={transactionTypes}
+            onChange={(value) => void changeTransactionType(value)}
+            style={styles.typeSwitch}
+            value={transactionType}
+          />
+          <AppText color="textSubtle" style={styles.typeHelper} variant="caption">
+            {t(transactionType === "income" ? "Income adds money to your wallet." : "Expenses reduce your wallet balance.")}
+          </AppText>
+
           <AmountInput
             autoFocus
             error={amountError}
@@ -326,16 +368,23 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
             value={amount}
           />
 
-          <SectionHeader action={t("Manage")} onAction={() => navigation.navigate("Categories")} title={t("Category")} />
-          <ReorderableCategoryRail
-            categories={categories}
-            onManage={() => navigation.navigate("Categories")}
-            onReorder={reorderCategories}
-            onSelect={setCategory}
-            selectedId={category}
-          />
+          <SectionHeader action={t("Manage")} onAction={() => navigation.navigate("Categories", { transactionType })} title={t("Category")} />
+          {categoryLoading ? (
+            <View style={styles.skeletonChipRow}>
+              <SkeletonBlock height={44} radius={22} width={112} />
+              <SkeletonBlock height={44} radius={22} width={92} />
+            </View>
+          ) : (
+            <ReorderableCategoryRail
+              categories={categories}
+              onManage={() => navigation.navigate("Categories", { transactionType })}
+              onReorder={reorderCategories}
+              onSelect={setCategory}
+              selectedId={category}
+            />
+          )}
 
-          <SectionHeader title={t("Payment")} />
+          <SectionHeader title={t(transactionType === "income" ? "Received via" : "Paid via")} />
           <AppSegmentedControl accessibilityLabel={t("Payment method")} items={localizedPaymentModes} onChange={setPaymentMethod} style={styles.paymentSwitch} value={paymentMethod} />
 
           <AppCard style={styles.quickDetailsCard}>
@@ -365,7 +414,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
 
           {detailsOpen ? (
             <AppCard>
-              <FormField label={t("Label")} onChangeText={setTitle} placeholder={getSmartTitle(selectedCategory, paymentMethod, t)} value={title} />
+              <FormField label={t("Label")} onChangeText={setTitle} placeholder={getSmartTitle(selectedCategory, paymentMethod, transactionType, t)} value={title} />
               <View style={{ height: dsSpace[1.5] }} />
               <FormField
                 label={t("Note")}
@@ -382,8 +431,8 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       )}
 
       <BottomActionBar>
-        <AppButton block disabled={saving || loading} loading={saving} onPress={save}>
-          {t(isEditing ? "Save changes" : "Save expense")}
+        <AppButton block disabled={saving || loading || categoryLoading} loading={saving} onPress={save}>
+          {t(isEditing ? "Save changes" : transactionType === "income" ? "Add income" : "Add expense")}
         </AppButton>
       </BottomActionBar>
     </AppScreen>
@@ -652,6 +701,14 @@ const styles = StyleSheet.create({
   },
   screenContent: {
     paddingBottom: 112,
+  },
+  typeHelper: {
+    marginBottom: dsSpace[1.5],
+    marginTop: dsSpace[0.5],
+    textAlign: "center",
+  },
+  typeSwitch: {
+    marginBottom: 0,
   },
   skeletonChipRow: {
     flexDirection: "row",

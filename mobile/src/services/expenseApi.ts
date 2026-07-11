@@ -17,6 +17,7 @@ import {
   MonthlyBudget,
   MonthlySummary,
   PaymentMethod,
+  TransactionType,
   PeopleOverview,
   Person,
   PersonLedger,
@@ -37,14 +38,19 @@ export type ExpenseFilters = {
   household?: number;
   limit?: number;
   ordering?: "recent" | "oldest" | "amount_desc" | "amount_asc";
+  transaction_type?: TransactionType;
 };
+
+export type TransactionFilters = ExpenseFilters;
 
 function unpackList<T>(data: T[] | { results: T[] }): T[] {
   return Array.isArray(data) ? data : data.results;
 }
 
-export async function getCategories() {
-  const response = await cachedGet<ExpenseCategory[] | { results: ExpenseCategory[] }>("/categories/");
+export async function getCategories(transactionType: TransactionType = "expense") {
+  const response = await cachedGet<ExpenseCategory[] | { results: ExpenseCategory[] }>("/categories/", {
+    params: { transaction_type: transactionType },
+  });
   return unpackList(response.data);
 }
 
@@ -62,8 +68,10 @@ export async function deleteCategory(id: number) {
   await client.delete(`/categories/${id}/`);
 }
 
-export async function seedDefaultCategories() {
-  const response = await client.post<ExpenseCategory[]>("/categories/seed-defaults/");
+export async function seedDefaultCategories(transactionType: TransactionType = "expense") {
+  const response = await client.post<ExpenseCategory[]>("/categories/seed-defaults/", {
+    transaction_type: transactionType,
+  });
   return response.data;
 }
 
@@ -91,6 +99,32 @@ export async function updateExpense(id: number, payload: CreateExpensePayload) {
 
 export async function deleteExpense(id: number) {
   await client.delete(`/expenses/${id}/`);
+}
+
+export async function getTransactions(filters: TransactionFilters = {}) {
+  const response = await cachedGet<Expense[] | { results: Expense[] }>("/transactions/", {
+    params: filters,
+  });
+  return unpackList(response.data);
+}
+
+export async function getTransaction(id: number) {
+  const response = await cachedGet<Expense>(`/transactions/${id}/`);
+  return response.data;
+}
+
+export async function createTransaction(payload: CreateExpensePayload) {
+  const response = await client.post<Expense>("/transactions/", payload);
+  return response.data;
+}
+
+export async function updateTransaction(id: number, payload: CreateExpensePayload) {
+  const response = await client.put<Expense>(`/transactions/${id}/`, payload);
+  return response.data;
+}
+
+export async function deleteTransaction(id: number) {
+  await client.delete(`/transactions/${id}/`);
 }
 
 export async function getMonthlySummary(month: string) {

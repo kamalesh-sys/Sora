@@ -8,6 +8,7 @@ import {
   AppButton,
   AppCard,
   AppScreen,
+  AppSegmentedControl,
   AppText,
   EmptyState,
   ErrorState,
@@ -23,27 +24,25 @@ import {
 } from "../design-system";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
-import { Translate, useI18n } from "../i18n";
+import { type Translate, useI18n } from "../i18n";
 import { getCategories, getMonthlySummary } from "../services/expenseApi";
 import { exportMonthlyReport } from "../services/reportExport";
 import { getCategoryVisual } from "../theme/soraTheme";
-import type { ExpenseCategory, MonthlySummary } from "../types/api";
+import type { ExpenseCategory, MonthlySummary, TransactionType } from "../types/api";
 import { getCurrentMonth, isValidMonth } from "../utils/date";
 import { formatCurrencyCompact, formatMonthLabel, formatPaymentMethod, parseAmount } from "../utils/format";
 
-function shiftMonth(value: string, offset: number) {
-  const [year, month] = value.split("-").map(Number);
-  const date = new Date(year, month - 1 + offset, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+function getCashFlowSummary(current: MonthlySummary | null | undefined, t: Translate) {
+  return t("Income {income} · Expenses {expenses}", {
+    expenses: formatCurrencyCompact(current?.total_expense),
+    income: formatCurrencyCompact(current?.total_income),
+  });
 }
 
-function getComparison(current: MonthlySummary | null | undefined, previous: MonthlySummary | null | undefined, month: string, t: Translate) {
-  const currentTotal = parseAmount(current?.total_expense);
-  const previousTotal = parseAmount(previous?.total_expense);
-  if (!previousTotal) return t("{month} spend: {amount}", { amount: formatCurrencyCompact(currentTotal), month: formatMonthLabel(month) });
-  const change = ((currentTotal - previousTotal) / previousTotal) * 100;
-  return t(change >= 0 ? "Up {percent}% vs last month" : "Down {percent}% vs last month", { percent: Math.abs(change).toFixed(0) });
-}
+const breakdownTypes: Array<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: TransactionType }> = [
+  { icon: "arrow-up-right", label: "Expenses", value: "expense" },
+  { icon: "arrow-down-left", label: "Income", value: "income" },
+];
 
 export function ReportsScreen() {
   const { colors } = useDs();
@@ -53,10 +52,10 @@ export function ReportsScreen() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
-  const [previousSummary, setPreviousSummary] = useState<MonthlySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [breakdownType, setBreakdownType] = useState<TransactionType>("expense");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -68,14 +67,13 @@ export function ReportsScreen() {
 
     setError("");
     try {
-      const [current, previous, categoryRows] = await Promise.all([
+      const [current, expenseCategories, incomeCategories] = await Promise.all([
         getMonthlySummary(month),
-        getMonthlySummary(shiftMonth(month, -1)),
-        getCategories(),
+        getCategories("expense"),
+        getCategories("income"),
       ]);
       setSummary(current);
-      setPreviousSummary(previous);
-      setCategories(categoryRows);
+      setCategories([...expenseCategories, ...incomeCategories]);
     } catch {
       setError(t("Could not load report. Pull to retry."));
     } finally {
@@ -91,8 +89,10 @@ export function ReportsScreen() {
   );
 
   const total = parseAmount(summary?.total_expense);
+  const totalIncome = parseAmount(summary?.total_income);
+  const netCashFlow = parseAmount(summary?.net_cash_flow);
+  const walletBalance = parseAmount(summary?.wallet_balance);
   const budget = parseAmount(summary?.total_budget);
-  const balance = parseAmount(summary?.balance);
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((total / budget) * 100)) : 0;
   const primaryCardBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
   const primaryCardText = "#FFFFFF";
@@ -107,13 +107,16 @@ export function ReportsScreen() {
     },
     [categoryById, categoryByName]
   );
+  const activeCategoryBreakdown = breakdownType === "income" ? summary?.income_category_breakdown ?? [] : summary?.category_breakdown ?? [];
+  const activePaymentBreakdown = breakdownType === "income" ? summary?.income_payment_method_breakdown ?? [] : summary?.payment_method_breakdown ?? [];
+  const activeCount = breakdownType === "income" ? summary?.income_count ?? 0 : summary?.expense_count ?? 0;
   const chartRows = useMemo(
     () =>
-      (summary?.category_breakdown ?? []).map((row) => {
+      activeCategoryBreakdown.map((row) => {
         const visual = getBreakdownVisual(row.category_id, row.category_name);
         return { color: visual.color, count: row.count, label: row.category_name, value: row.total };
       }),
-    [getBreakdownVisual, summary?.category_breakdown]
+    [activeCategoryBreakdown, getBreakdownVisual]
   );
 
   const exportReport = async (type: "csv" | "pdf") => {
@@ -154,7 +157,7 @@ export function ReportsScreen() {
         <AppCard>
           <View style={styles.cardHeader}>
             <AppText variant="headline">{t("Export")}</AppText>
-            <AppText color="textSubtle" variant="caption">{t((summary?.expense_count ?? 0) === 1 ? "{count} expense" : "{count} expenses", { count: summary?.expense_count ?? 0 })}</AppText>
+            <AppText color="textSubtle" variant="caption">{t((summary?.transaction_count ?? 0) === 1 ? "{count} transaction" : "{count} transactions", { count: summary?.transaction_count ?? 0 })}</AppText>
           </View>
           <View style={styles.actionRow}>
             <AppButton compact icon="file-pdf-box" loading={exporting === "pdf"} onPress={() => exportReport("pdf")} variant="secondary">PDF</AppButton>
@@ -170,14 +173,14 @@ export function ReportsScreen() {
           <AppCard elevated style={[styles.primaryCard, { backgroundColor: primaryCardBackground, borderColor: primaryCardBackground }]}>
             <View style={styles.primaryTop}>
               <View>
-                <AppText style={{ color: primaryCardMuted }} variant="caption">{t("Total spent")}</AppText>
-                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(total)}</AppText>
+                <AppText style={{ color: primaryCardMuted }} variant="caption">{t("Net cash flow")}</AppText>
+                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(netCashFlow)}</AppText>
               </View>
               <View style={[styles.primaryIcon, { backgroundColor: primaryIconBackground }]}>
                 <MaterialCommunityIcons name="chart-line" size={24} color="#FFFFFF" />
               </View>
             </View>
-            <AppText style={{ color: primaryCardMuted }} variant="body">{getComparison(summary, previousSummary, month, t)}</AppText>
+            <AppText style={{ color: primaryCardMuted }} variant="body">{getCashFlowSummary(summary, t)}</AppText>
           </AppCard>
 
           <AppCard>
@@ -188,27 +191,40 @@ export function ReportsScreen() {
           </AppCard>
 
           <View style={styles.metricGrid}>
-            <Metric label={t("Budget")} value={formatCurrencyCompact(budget)} meta={budget > 0 ? t("{percent}% used", { percent: budgetUsed }) : t("Not set")} />
-            <Metric label={t("Balance")} value={formatCurrencyCompact(balance)} meta={t(balance >= 0 ? "Remaining" : "Exceeded")} tone={balance < 0 ? "danger" : "success"} />
+            <Metric label={t("Income")} value={formatCurrencyCompact(totalIncome)} meta={t("This month")} tone="success" />
+            <Metric label={t("Expenses")} value={formatCurrencyCompact(total)} meta={t("This month")} />
           </View>
+
+          <View style={styles.metricGrid}>
+            <Metric label={t("Budget")} value={formatCurrencyCompact(budget)} meta={budget > 0 ? t("{percent}% used", { percent: budgetUsed }) : t("Not set")} />
+            <Metric label={t("Wallet balance")} value={formatCurrencyCompact(walletBalance)} meta={t("All time")} tone={walletBalance < 0 ? "danger" : "success"} />
+          </View>
+
+          <AppSegmentedControl
+            accessibilityLabel={t("Report breakdown type")}
+            items={breakdownTypes}
+            onChange={setBreakdownType}
+            style={styles.breakdownSwitch}
+            value={breakdownType}
+          />
 
           <AppCard>
             <View style={styles.cardHeader}>
-              <AppText variant="headline">{t("Where it went")}</AppText>
-              <AppText color="textSubtle" variant="caption">{t((summary?.expense_count ?? 0) === 1 ? "{count} expense" : "{count} expenses", { count: summary?.expense_count ?? 0 })}</AppText>
+              <AppText variant="headline">{t(breakdownType === "income" ? "Where it came from" : "Where it went")}</AppText>
+              <AppText color="textSubtle" variant="caption">{t(activeCount === 1 ? "{count} transaction" : "{count} transactions", { count: activeCount })}</AppText>
             </View>
-            {chartRows.length ? <SoraDonutChart rows={chartRows} size={168} /> : <EmptyState body={t("Hmm, waiting for expenses to build a category chart.")} icon="chart-donut" title={t("No breakdown yet")} />}
+            {chartRows.length ? <SoraDonutChart rows={chartRows} size={168} /> : <EmptyState body={t("Add transactions to build this category chart.")} icon="chart-donut" title={t("No breakdown yet")} />}
           </AppCard>
 
           <SectionHeader title={t("Categories")} />
-          {(summary?.category_breakdown ?? []).length ? (
+          {activeCategoryBreakdown.length ? (
             <AppCard style={styles.listCard}>
-              {summary?.category_breakdown.map((row) => {
+              {activeCategoryBreakdown.map((row) => {
                 const visual = getBreakdownVisual(row.category_id, row.category_name);
                 return (
                   <ListRow
                     amount={formatCurrencyCompact(row.total)}
-                    description={t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}
+                    description={t(row.count === 1 ? "{count} transaction" : "{count} transactions", { count: row.count })}
                     icon={visual.icon}
                     iconColor={visual.color}
                     key={`${row.category_id}-${row.category_name}`}
@@ -218,16 +234,16 @@ export function ReportsScreen() {
               })}
             </AppCard>
           ) : (
-            <EmptyState body={t("Hmm, waiting for category spending.")} icon="shape-outline" title={t("No categories yet")} />
+            <EmptyState body={t("No matching transaction categories for this month.")} icon="shape-outline" title={t("No categories yet")} />
           )}
 
           <SectionHeader title={t("Payments")} />
-          {(summary?.payment_method_breakdown ?? []).length ? (
+          {activePaymentBreakdown.length ? (
             <AppCard style={styles.listCard}>
-              {summary?.payment_method_breakdown.map((row) => (
+              {activePaymentBreakdown.map((row) => (
                 <ListRow
                   amount={formatCurrencyCompact(row.total)}
-                  description={t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}
+                  description={t(row.count === 1 ? "{count} transaction" : "{count} transactions", { count: row.count })}
                   icon={row.payment_method === "cash" ? "cash" : row.payment_method === "card" ? "credit-card-outline" : row.payment_method === "bank" ? "bank-outline" : "cellphone"}
                   key={row.payment_method}
                   title={formatPaymentMethod(row.payment_method)}
@@ -235,7 +251,7 @@ export function ReportsScreen() {
               ))}
             </AppCard>
           ) : (
-            <EmptyState body={t("Hmm, waiting for UPI or cash entries.")} icon="wallet-outline" title={t("No payments yet")} />
+            <EmptyState body={t("No matching payment entries for this month.")} icon="wallet-outline" title={t("No payments yet")} />
           )}
         </>
       )}
@@ -296,6 +312,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[1],
     marginTop: dsSpace[1.5],
+  },
+  breakdownSwitch: {
+    marginBottom: dsSpace[2],
   },
   cardHeader: {
     alignItems: "center",

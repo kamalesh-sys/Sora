@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -62,6 +62,7 @@ export function GoalsScreen({ navigation }: Props) {
   const [initialTemplate, setInitialTemplate] = useState<GoalTemplate | null>(null);
   const [saving, setSaving] = useState(false);
   const [editorError, setEditorError] = useState("");
+  const loadRequestRef = useRef(0);
 
   const activeGoals = useMemo(() => goals.filter((goal) => goal.status === "active"), [goals]);
   const completedGoals = useMemo(() => goals.filter((goal) => goal.status === "completed"), [goals]);
@@ -72,19 +73,29 @@ export function GoalsScreen({ navigation }: Props) {
   const heroBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
   const heroIconBackground = themeMode === "dark" ? "#0A0B0D" : colors.accent;
 
-  const load = useCallback(async (showInitialLoading = false) => {
-    if (showInitialLoading) setLoading(true);
+  const load = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
+    const requestId = ++loadRequestRef.current;
+    if (reset) {
+      setLoading(true);
+      setGoals([]);
+      setTemplates([]);
+    }
     setError("");
     try {
       const [goalRows, templateRows] = await Promise.all([
         getGoals(),
         getGoalTemplates().catch(() => [] as GoalTemplate[]),
       ]);
+      if (requestId !== loadRequestRef.current) return;
       setGoals(goalRows);
       setTemplates(templateRows);
     } catch (loadError) {
+      if (requestId !== loadRequestRef.current) return;
+      setGoals([]);
+      setTemplates([]);
       setError(getApiErrorMessage(loadError, t("Could not load goals. Check your connection and try again.")));
     } finally {
+      if (requestId !== loadRequestRef.current) return;
       setLoading(false);
       setRefreshing(false);
     }
@@ -92,7 +103,10 @@ export function GoalsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      void load(true);
+      void load({ reset: true });
+      return () => {
+        loadRequestRef.current += 1;
+      };
     }, [load])
   );
 
@@ -109,9 +123,10 @@ export function GoalsScreen({ navigation }: Props) {
       const created = await createGoal(payload);
       success();
       setEditorOpen(false);
-        setNotice(t("Goal created. Your monthly plan is ready."));
+      setInitialTemplate(null);
+      setNotice(t("Goal created. Your monthly plan is ready."));
       setGoals((current) => [created, ...current]);
-      navigation.navigate("GoalDetail", { created: true, goalId: created.id });
+      navigation.push("GoalDetail", { created: true, goalId: created.id });
     } catch (saveError) {
       setEditorError(getApiErrorMessage(saveError, t("Could not create goal. Try again.")));
     } finally {
@@ -144,7 +159,7 @@ export function GoalsScreen({ navigation }: Props) {
           action={t("Try again")}
           body={error}
           icon="cloud-alert-outline"
-          onAction={() => void load(true)}
+          onAction={() => void load({ reset: true })}
           title={t("Goals are unavailable")}
         />
       ) : (
@@ -178,16 +193,12 @@ export function GoalsScreen({ navigation }: Props) {
 
           {templates.length ? (
             <>
-              <SectionHeader title="Quick start" />
-              <ScrollView
-                contentContainerStyle={styles.templateRail}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
+              <SectionHeader title={goals.length ? "Start another goal" : "Choose a goal template"} />
+              <View style={styles.templateGrid}>
                 {templates.map((template) => (
                   <GoalTemplateCard key={template.key} onPress={() => openEditor(template)} template={template} />
                 ))}
-              </ScrollView>
+              </View>
             </>
           ) : null}
 
@@ -208,7 +219,7 @@ export function GoalsScreen({ navigation }: Props) {
                   <GoalCard
                     goal={goal}
                     key={goal.id}
-                    onPress={() => navigation.navigate("GoalDetail", { goalId: goal.id })}
+                    onPress={() => navigation.push("GoalDetail", { goalId: goal.id })}
                   />
                 ))
               ) : (
@@ -234,7 +245,11 @@ export function GoalsScreen({ navigation }: Props) {
       <GoalFormSheet
         error={editorError}
         initialTemplate={initialTemplate}
-        onClose={() => setEditorOpen(false)}
+        onClose={() => {
+          setEditorOpen(false);
+          setInitialTemplate(null);
+          setEditorError("");
+        }}
         onSave={saveGoal}
         saving={saving}
         templates={templates}
@@ -246,26 +261,35 @@ export function GoalsScreen({ navigation }: Props) {
 
 function GoalTemplateCard({ onPress, template }: { onPress: () => void; template: GoalTemplate }) {
   const { colors } = useDs();
+  const color = safeGoalColor(template.color, colors.accent);
   return (
     <Pressable
       accessibilityLabel={`Create ${template.name} goal`}
       accessibilityRole="button"
       android_ripple={{ color: colors.press }}
       onPress={onPress}
-      style={[styles.quickStartCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[styles.quickStartCard, { backgroundColor: colors.surface, borderColor: color }]}
     >
-      <View style={[styles.quickStartIcon, { backgroundColor: colors.chipBg }]}>
-        <MaterialCommunityIcons color={colors.accent} name={getGoalIcon(template.icon, template.key)} size={24} />
+      <View style={[styles.templateColorBand, { backgroundColor: color }]} />
+      <View style={styles.quickStartTop}>
+        <View style={[styles.quickStartIcon, { backgroundColor: goalColorWash(color) }]}>
+          <MaterialCommunityIcons color={color} name={getGoalIcon(template.icon, template.key)} size={22} />
+        </View>
+        <View style={[styles.templateArrow, { backgroundColor: goalColorWash(color) }]}>
+          <MaterialCommunityIcons color={color} name="arrow-top-right" size={18} />
+        </View>
       </View>
       <View style={styles.quickStartText}>
-        <AppText numberOfLines={2} variant="bodyStrong">
+        <AppText numberOfLines={1} variant="bodyStrong">
           {template.name}
         </AppText>
-        <AppText color="textSubtle" numberOfLines={1} variant="caption">
-          {template.suggested_months} months
+        <AppText color="textMuted" numberOfLines={2} variant="caption">
+          {template.description}
         </AppText>
       </View>
-      <MaterialCommunityIcons color={colors.textSubtle} name="arrow-top-right" size={20} />
+      <AppText color="textSubtle" variant="caption">
+        {template.suggested_months}-month plan
+      </AppText>
     </Pressable>
   );
 }
@@ -469,25 +493,29 @@ const styles = StyleSheet.create({
     gap: dsSpace[1.5],
   },
   quickStartCard: {
-    alignItems: "center",
     borderRadius: dsRadius.md,
     borderWidth: 1,
-    flexDirection: "row",
+    flexBasis: "48%",
     gap: dsSpace[1],
-    minHeight: 88,
+    minHeight: 148,
+    overflow: "hidden",
     padding: dsSpace[1.5],
-    width: 246,
   },
   quickStartIcon: {
     alignItems: "center",
     borderRadius: dsRadius.md,
-    height: 48,
+    height: 42,
     justifyContent: "center",
-    width: 48,
+    width: 42,
   },
   quickStartText: {
     flex: 1,
     minWidth: 0,
+  },
+  quickStartTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   skeletonCopy: {
     flex: 1,
@@ -520,9 +548,24 @@ const styles = StyleSheet.create({
   successText: {
     flex: 1,
   },
-  templateRail: {
+  templateArrow: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  templateColorBand: {
+    height: 5,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  templateGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: dsSpace[1],
     marginBottom: dsSpace[2],
-    paddingRight: dsSpace[2],
   },
 });

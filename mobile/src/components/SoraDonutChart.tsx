@@ -101,7 +101,7 @@ export function SoraDonutChart({
                 </Text>
                 <Text style={[styles.legendMeta, { color: colors.muted }]}>
                   {formatCurrencyCompact(value)} - {percent}%
-                  {row.count ? ` - ${t(row.count === 1 ? "{count} expense" : "{count} expenses", { count: row.count })}` : ""}
+                  {row.count ? ` - ${t(row.count === 1 ? "{count} transaction" : "{count} transactions", { count: row.count })}` : ""}
                 </Text>
               </View>
             </View>

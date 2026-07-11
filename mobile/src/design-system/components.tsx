@@ -451,7 +451,7 @@ export function AppSegmentedControl<T extends string>({
   value,
 }: {
   accessibilityLabel?: string;
-  items: Array<{ label: string; value: T }>;
+  items: Array<{ icon?: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: T }>;
   onChange: (value: T) => void;
   style?: StyleProp<ViewStyle>;
   value: T;
@@ -476,6 +476,13 @@ export function AppSegmentedControl<T extends string>({
             onPress={() => onChange(item.value)}
             style={[styles.segmentedItem, active ? { backgroundColor: colors.bgInverse } : null]}
           >
+            {item.icon ? (
+              <MaterialCommunityIcons
+                name={item.icon}
+                size={18}
+                color={active ? colors.textInverse : colors.textMuted}
+              />
+            ) : null}
             <AppText
               numberOfLines={1}
               style={{ color: active ? colors.textInverse : colors.text }}
@@ -492,6 +499,7 @@ export function AppSegmentedControl<T extends string>({
 
 export function ListRow({
   amount,
+  amountColor,
   description,
   icon,
   iconColor,
@@ -500,6 +508,7 @@ export function ListRow({
   title,
 }: {
   amount?: string;
+  amountColor?: string;
   description?: string;
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   iconColor?: string;
@@ -521,7 +530,7 @@ export function ListRow({
         {description ? <AppText color="textSubtle" numberOfLines={1} variant="caption">{description}</AppText> : null}
       </View>
       <View style={styles.listEnd}>
-        {amount ? <AppText numberOfLines={1} variant="bodyStrong">{amount}</AppText> : null}
+        {amount ? <AppText numberOfLines={1} style={amountColor ? { color: amountColor } : undefined} variant="bodyStrong">{amount}</AppText> : null}
         {rightLabel ? <AppText color="textSubtle" numberOfLines={1} variant="caption">{rightLabel}</AppText> : null}
       </View>
       {onPress ? <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSubtle} /> : null}
@@ -985,6 +994,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: dsRadius.pill,
     flex: 1,
+    flexDirection: "row",
+    gap: dsSpace[0.5],
     justifyContent: "center",
     minHeight: dsSize.control.sm,
     paddingHorizontal: dsSpace[1],

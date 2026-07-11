@@ -76,28 +76,47 @@ export function GoalDetailScreen({ navigation, route }: Props) {
   const [skipping, setSkipping] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sheetError, setSheetError] = useState("");
+  const loadRequestRef = useRef(0);
 
-  const load = useCallback(async (showInitialLoading = false) => {
-    if (showInitialLoading) setLoading(true);
+  const load = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
+    const requestId = ++loadRequestRef.current;
+    if (reset) {
+      setLoading(true);
+      setGoal(null);
+      setTemplates([]);
+      setNotice(route.params.created ? "Goal created. Your monthly plan is ready." : "");
+      setEditing(false);
+      setContributing(false);
+      setSkipping(false);
+      setSheetError("");
+    }
     setError("");
     try {
       const [nextGoal, nextTemplates] = await Promise.all([
         getGoal(route.params.goalId),
         getGoalTemplates().catch(() => [] as GoalTemplate[]),
       ]);
+      if (requestId !== loadRequestRef.current) return;
       setGoal(nextGoal);
       setTemplates(nextTemplates);
     } catch (loadError) {
+      if (requestId !== loadRequestRef.current) return;
+      setGoal(null);
+      setTemplates([]);
       setError(getApiErrorMessage(loadError, "Could not load this goal. Try again."));
     } finally {
+      if (requestId !== loadRequestRef.current) return;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [route.params.goalId]);
+  }, [route.params.created, route.params.goalId]);
 
   useFocusEffect(
     useCallback(() => {
-      void load(true);
+      void load({ reset: true });
+      return () => {
+        loadRequestRef.current += 1;
+      };
     }, [load])
   );
 
@@ -148,7 +167,7 @@ export function GoalDetailScreen({ navigation, route }: Props) {
             setError("");
             try {
               await deleteGoal(goal.id);
-              navigation.navigate("Goals");
+              navigation.goBack();
             } catch (deleteError) {
               setError(getApiErrorMessage(deleteError, "Could not delete goal."));
             } finally {
@@ -209,7 +228,7 @@ export function GoalDetailScreen({ navigation, route }: Props) {
           action="Try again"
           body={error || "This goal may have been removed."}
           icon="target-variant"
-          onAction={() => void load(true)}
+          onAction={() => void load({ reset: true })}
           title="Goal not available"
         />
       </AppScreen>

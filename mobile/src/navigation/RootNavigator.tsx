@@ -12,11 +12,12 @@ import { GoalsScreen } from "../screens/GoalsScreen";
 import { PeopleScreen } from "../screens/PeopleScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReportsScreen } from "../screens/ReportsScreen";
+import type { TransactionType } from "../types/api";
 
 export type RootStackParamList = {
   Bills: undefined;
-  Categories: undefined;
-  ExpenseForm: { expenseId?: number } | undefined;
+  Categories: { transactionType?: TransactionType } | undefined;
+  ExpenseForm: { expenseId?: number; transactionType?: TransactionType } | undefined;
   Expenses: undefined;
   GoalDetail: { created?: boolean; goalId: number };
   Goals: undefined;

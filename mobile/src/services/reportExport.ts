@@ -26,8 +26,8 @@ export async function exportMonthlyReport({
   const endpoint = type === "csv" ? "export-csv" : "export-pdf";
   const filename =
     type === "csv"
-      ? `${householdId ? `household-${householdId}-` : ""}sora-expenses-${month}.csv`
-      : `${householdId ? `household-${householdId}-` : ""}sora-expense-report-${month}.pdf`;
+      ? `${householdId ? `household-${householdId}-` : ""}sora-transactions-${month}.csv`
+      : `${householdId ? `household-${householdId}-` : ""}sora-transaction-report-${month}.pdf`;
   const basePath = householdId
     ? `${API_BASE_URL}/households/${householdId}/reports/${endpoint}/`
     : `${API_BASE_URL}/reports/${endpoint}/`;

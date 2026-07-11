@@ -19,6 +19,8 @@ import { formatDateLabel, parseAmount } from "../../utils/format";
 import {
   defaultGoalDate,
   fromDateInputValue,
+  goalColorPresets,
+  goalColorWash,
   getGoalIcon,
   isFutureDate,
   sanitizeGoalAmount,
@@ -163,14 +165,14 @@ export function GoalFormSheet({
                   style={[
                     styles.templateCard,
                     {
-                      backgroundColor: active ? colors.chipBg : colors.surfaceAlt,
-                      borderColor: active ? colors.accent : colors.border,
+                      backgroundColor: active ? goalColorWash(template.color) : colors.surfaceAlt,
+                      borderColor: active ? template.color : colors.border,
                     },
                   ]}
                 >
-                  <View style={[styles.templateIcon, { backgroundColor: colors.chipBg }]}>
+                  <View style={[styles.templateIcon, { backgroundColor: goalColorWash(template.color) }]}>
                     <MaterialCommunityIcons
-                      color={colors.accent}
+                      color={template.color}
                       name={getGoalIcon(template.icon, template.key)}
                       size={22}
                     />
@@ -242,6 +244,34 @@ export function GoalFormSheet({
           {fieldErrors.date}
         </AppText>
       ) : null}
+      <View style={styles.colorSection}>
+        <AppText color="textMuted" style={styles.label} variant="label">
+          Goal color
+        </AppText>
+        <View style={styles.colorRow}>
+          {goalColorPresets.map((preset) => {
+            const selected = color === preset.value;
+            return (
+              <Pressable
+                accessibilityLabel={`${preset.label} goal color`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                android_ripple={{ color: colors.press }}
+                key={preset.value}
+                onPress={() => setColor(preset.value)}
+                style={[
+                  styles.colorOption,
+                  { borderColor: selected ? colors.text : colors.border },
+                ]}
+              >
+                <View style={[styles.colorSwatch, { backgroundColor: preset.value }]}>
+                  {selected ? <MaterialCommunityIcons color={colors.surface} name="check" size={18} /> : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
       {showDatePicker ? (
         <View style={styles.datePickerWrap}>
           <DateTimePicker
@@ -264,6 +294,31 @@ export function GoalFormSheet({
 }
 
 const styles = StyleSheet.create({
+  colorOption: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    borderWidth: 2,
+    height: 40,
+    justifyContent: "center",
+    padding: 3,
+    width: 40,
+  },
+  colorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: dsSpace[1],
+  },
+  colorSection: {
+    marginBottom: dsSpace[1.5],
+    marginTop: dsSpace[1.5],
+  },
+  colorSwatch: {
+    alignItems: "center",
+    borderRadius: dsRadius.pill,
+    height: "100%",
+    justifyContent: "center",
+    width: "100%",
+  },
   dateField: {
     alignItems: "center",
     borderRadius: dsRadius.sm,
@@ -302,17 +357,17 @@ const styles = StyleSheet.create({
     borderRadius: dsRadius.md,
     borderWidth: 1,
     gap: dsSpace[0.5],
-    minHeight: 122,
-    padding: dsSpace[1.5],
-    width: 144,
+    minHeight: 104,
+    padding: dsSpace[1],
+    width: 126,
   },
   templateIcon: {
     alignItems: "center",
     borderRadius: dsRadius.sm,
-    height: 40,
+    height: 36,
     justifyContent: "center",
     marginBottom: dsSpace[0.5],
-    width: 40,
+    width: 36,
   },
   templateRail: {
     gap: dsSpace[1],

@@ -5,6 +5,16 @@ import { parseAmount } from "../../utils/format";
 
 export type GoalTone = "primary" | "success" | "warning" | "danger";
 
+export const goalColorPresets = [
+  { label: "Forest", value: "#2E7D5B" },
+  { label: "Blue", value: "#276EF1" },
+  { label: "Violet", value: "#7A5AF8" },
+  { label: "Amber", value: "#B54708" },
+  { label: "Rose", value: "#C11574" },
+  { label: "Teal", value: "#087E8B" },
+  { label: "Slate", value: "#344054" },
+] as const;
+
 const goalIcons: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
   business: "briefcase-outline",
   education: "school-outline",

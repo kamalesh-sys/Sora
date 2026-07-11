@@ -1,4 +1,5 @@
 export type PaymentMethod = "upi" | "cash" | "bank" | "card" | "wallet" | "other";
+export type TransactionType = "expense" | "income";
 export type ExpenseType = "personal" | "shared" | "household";
 export type ExpenseVisibility = "private" | "shared" | "household";
 
@@ -7,6 +8,7 @@ export type ExpenseCategory = {
   name: string;
   icon?: string;
   color?: string;
+  transaction_type: TransactionType;
   created_at: string;
 };
 
@@ -101,6 +103,7 @@ export type Expense = {
   id: number;
   title: string;
   amount: string;
+  transaction_type: TransactionType;
   category: number | null;
   category_detail: ExpenseCategory | null;
   household: number | null;
@@ -130,6 +133,7 @@ export type SplitType = "equal" | "custom_amount" | "percentage";
 export type CreateExpensePayload = {
   title: string;
   amount: string;
+  transaction_type?: TransactionType;
   category: number | null;
   payment_method: PaymentMethod;
   expense_date: string;
@@ -153,6 +157,7 @@ export type CreateCategoryPayload = {
   name: string;
   icon?: string;
   color?: string;
+  transaction_type?: TransactionType;
 };
 
 export type MonthlyBudget = {
@@ -186,18 +191,29 @@ export type PaymentMethodBreakdownItem = {
 export type MonthlySummary = {
   month: string;
   total_expense: string;
+  total_income: string;
   total_budget: string;
   balance: string;
+  net_cash_flow: string;
+  wallet_balance: string;
   category_breakdown: CategoryBreakdownItem[];
   payment_method_breakdown: PaymentMethodBreakdownItem[];
+  income_category_breakdown: CategoryBreakdownItem[];
+  income_payment_method_breakdown: PaymentMethodBreakdownItem[];
   expense_count: number;
+  income_count: number;
+  transaction_count: number;
 };
 
 export type DashboardSummary = {
   summary: MonthlySummary;
   previous_summary: MonthlySummary;
   recent_expenses: Expense[];
+  recent_transactions: Expense[];
 };
+
+export type Transaction = Expense;
+export type CreateTransactionPayload = CreateExpensePayload;
 
 export type Settlement = {
   id: number;

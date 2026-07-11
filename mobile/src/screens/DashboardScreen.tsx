@@ -8,7 +8,6 @@ import {
   AppBottomSheet,
   AppButton,
   AppCard,
-  AppCandleChart,
   AppScreen,
   AppText,
   EmptyState,
@@ -26,7 +25,7 @@ import { AbstractAvatar, type AbstractAvatarKey } from "../components/AbstractAv
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/RootNavigator";
-import { getDashboardSummary, getExpenses } from "../services/expenseApi";
+import { getDashboardSummary } from "../services/expenseApi";
 import { getCategoryVisual } from "../theme/soraTheme";
 import type { DashboardSummary, Expense } from "../types/api";
 import { getCurrentMonth } from "../utils/date";
@@ -52,29 +51,8 @@ function getDisplayName(userName?: string, email?: string) {
 function todayTotal(expenses: Expense[]) {
   const today = new Date().toISOString().slice(0, 10);
   return expenses
-    .filter((expense) => expense.expense_date === today)
+    .filter((expense) => expense.expense_date === today && expense.transaction_type !== "income")
     .reduce((sum, expense) => sum + parseAmount(expense.amount), 0);
-}
-
-function buildDailySpendCandles(expenses: Expense[], month: string, maxBars = 12) {
-  const [year, monthIndex] = month.split("-").map(Number);
-  const daysInMonth = Number.isFinite(year) && Number.isFinite(monthIndex) ? new Date(year, monthIndex, 0).getDate() : 31;
-  const dailyValues = Array.from({ length: daysInMonth }, () => 0);
-
-  expenses.forEach((expense) => {
-    if (!expense.expense_date.startsWith(month)) return;
-    const day = Number(expense.expense_date.slice(8, 10));
-    if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return;
-    dailyValues[day - 1] += parseAmount(expense.amount);
-  });
-
-  if (dailyValues.length <= maxBars) return dailyValues;
-  const bucketSize = Math.ceil(dailyValues.length / maxBars);
-  const buckets: number[] = [];
-  for (let index = 0; index < dailyValues.length; index += bucketSize) {
-    buckets.push(dailyValues.slice(index, index + bucketSize).reduce((sum, value) => sum + value, 0));
-  }
-  return buckets;
 }
 
 export function DashboardScreen({ navigation }: Props) {
@@ -83,7 +61,6 @@ export function DashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [month] = useState(getCurrentMonth());
   const [data, setData] = useState<DashboardSummary | null>(null);
-  const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -91,17 +68,17 @@ export function DashboardScreen({ navigation }: Props) {
 
   const displayName = getDisplayName(user?.first_name, user?.email);
   const recentExpenses = useMemo(
-    () => [...(data?.recent_expenses ?? [])].sort((a, b) => b.expense_date.localeCompare(a.expense_date) || b.created_at.localeCompare(a.created_at)),
-    [data?.recent_expenses]
+    () => [...(data?.recent_transactions ?? [])].sort((a, b) => b.expense_date.localeCompare(a.expense_date) || b.created_at.localeCompare(a.created_at)),
+    [data?.recent_transactions]
   );
   const todaySpend = todayTotal(recentExpenses);
   const monthSpend = parseAmount(data?.summary.total_expense);
+  const monthIncome = parseAmount(data?.summary.total_income);
+  const netCashFlow = parseAmount(data?.summary.net_cash_flow);
+  const walletBalance = parseAmount(data?.summary.wallet_balance);
   const budget = parseAmount(data?.summary.total_budget);
   const balance = parseAmount(data?.summary.balance);
   const budgetUsed = budget > 0 ? Math.min(100, Math.round((monthSpend / budget) * 100)) : 0;
-  const dailyCandles = useMemo(() => buildDailySpendCandles(monthExpenses, month), [month, monthExpenses]);
-  const hasDailyCandles = dailyCandles.some((value) => value > 0);
-  const compactCandles = hasDailyCandles ? dailyCandles : [4, 8, 5, 11, 7, 13, 6, 9, 5, 12, 8, 10];
   const primaryCardBackground = themeMode === "dark" ? colors.accent : colors.bgInverse;
   const primaryCardText = "#FFFFFF";
   const primaryCardMuted = "rgba(255,255,255,0.72)";
@@ -110,12 +87,8 @@ export function DashboardScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [nextData, expenseRows] = await Promise.all([
-        getDashboardSummary(month, 30),
-        getExpenses({ month, ordering: "recent" }),
-      ]);
+      const nextData = await getDashboardSummary(month, 30);
       setData(nextData);
-      setMonthExpenses(expenseRows);
       void updateSoraExpenseWidget(nextData.recent_expenses[0] ?? null);
     } catch {
       setError("Could not load dashboard. Pull to retry.");
@@ -165,21 +138,21 @@ export function DashboardScreen({ navigation }: Props) {
           <AppCard elevated style={[styles.primaryCard, { backgroundColor: primaryCardBackground, borderColor: primaryCardBackground }]}>
             <View style={styles.primaryTop}>
               <View>
-                <AppText style={{ color: primaryCardMuted }} variant="caption">Today</AppText>
-                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(todaySpend)}</AppText>
+                <AppText style={{ color: primaryCardMuted }} variant="caption">{t("Wallet balance")}</AppText>
+                <AppText style={{ color: primaryCardText }} variant="display">{formatCurrencyCompact(walletBalance)}</AppText>
               </View>
               <View style={[styles.primaryIcon, { backgroundColor: primaryIconBackground }]}>
                 <MaterialCommunityIcons name="wallet-outline" size={24} color="#FFFFFF" />
               </View>
             </View>
             <AppText style={{ color: primaryCardMuted }} variant="body">
-              {formatMonthLabel(month)} spend: {formatCurrencyCompact(monthSpend)}
+              {t("{month} net: {amount}", { amount: formatCurrencyCompact(netCashFlow), month: formatMonthLabel(month) })}
             </AppText>
           </AppCard>
 
           <View style={styles.metricGrid}>
-            <ActivityMetricCard inactive={!hasDailyCandles} values={compactCandles} />
-            <MetricCard label="Balance" value={formatCurrencyCompact(balance)} meta={budget ? `${budgetUsed}% used` : "No budget"} tone={balance < 0 ? "danger" : "success"} />
+            <MetricCard label={t("Income")} value={formatCurrencyCompact(monthIncome)} meta={t("This month")} tone="success" />
+            <MetricCard label={t("Expenses")} value={formatCurrencyCompact(monthSpend)} meta={t("{amount} today", { amount: formatCurrencyCompact(todaySpend) })} />
           </View>
 
           <AppCard>
@@ -198,10 +171,10 @@ export function DashboardScreen({ navigation }: Props) {
           <AppCard>
             <SectionHeader title="Actions" />
             <View style={styles.quickGrid}>
-              <QuickAction icon="plus-circle-outline" label="Expense" onPress={() => navigation.navigate("ExpenseForm")} />
-              <QuickAction icon="calendar-clock" label="Bills" onPress={() => navigation.navigate("Bills")} />
+              <QuickAction icon="arrow-up-right" label="Expense" onPress={() => navigation.navigate("ExpenseForm", { transactionType: "expense" })} />
+              <QuickAction icon="arrow-down-left" label="Income" onPress={() => navigation.navigate("ExpenseForm", { transactionType: "income" })} />
               <QuickAction icon="target" label="Goals" onPress={() => navigation.navigate("Goals")} />
-              <QuickAction icon="chart-bar" label="Reports" onPress={() => navigation.navigate("Reports")} />
+              <QuickAction icon="account-multiple-outline" label="People" onPress={() => navigation.navigate("People")} />
             </View>
           </AppCard>
 
@@ -214,7 +187,8 @@ export function DashboardScreen({ navigation }: Props) {
                 const visual = getCategoryVisual(expense.category_detail?.name, expense.category_detail?.icon, expense.category_detail?.color);
                 return (
                   <ListRow
-                    amount={formatCurrencyCompact(expense.amount)}
+                    amount={`${expense.transaction_type === "income" ? "+" : "−"}${formatCurrencyCompact(expense.amount)}`}
+                    amountColor={expense.transaction_type === "income" ? colors.success : colors.text}
                     description={`${expense.category_detail?.name ?? "Uncategorized"} | ${formatRelativeDateLabel(expense.expense_date)}`}
                     icon={visual.icon}
                     iconColor={visual.color}
@@ -227,11 +201,11 @@ export function DashboardScreen({ navigation }: Props) {
             </AppCard>
           ) : (
             <EmptyState
-              action="Add expense"
-              body="Your daily expenses will appear here as soon as you add one."
-              icon="receipt-text-plus-outline"
+              action="Add transaction"
+              body="Income and expenses will appear here as soon as you add one."
+              icon="swap-vertical"
               onAction={() => navigation.navigate("ExpenseForm")}
-              title="No expenses yet"
+              title="No transactions yet"
             />
           )}
         </>
@@ -346,20 +320,6 @@ function DashboardSkeleton() {
       </View>
       <SkeletonList rows={3} />
     </>
-  );
-}
-
-function ActivityMetricCard({ inactive, values }: { inactive: boolean; values: number[] }) {
-  const { colors } = useDs();
-  return (
-    <AppCard style={[styles.metricCard, styles.activityMetricCard]}>
-      <AppCandleChart
-        accessibilityLabel={inactive ? "No daily spend yet" : "Daily spend"}
-        color={inactive ? colors.chipBg : colors.accent}
-        height={58}
-        values={values}
-      />
-    </AppCard>
   );
 }
 
@@ -480,10 +440,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[1],
     marginBottom: dsSpace[2],
-  },
-  activityMetricCard: {
-    justifyContent: "center",
-    paddingHorizontal: dsSpace[1.5],
   },
   primaryCard: {
     paddingVertical: dsSpace[3],
