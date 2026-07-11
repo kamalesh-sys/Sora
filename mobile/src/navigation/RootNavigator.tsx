@@ -49,7 +49,11 @@ export function RootNavigator() {
       <Stack.Screen name="Expenses" component={ExpensesScreen} />
       <Stack.Screen name="Goals" component={GoalsScreen} />
       <Stack.Screen name="GoalDetail" component={GoalDetailScreen} />
-      <Stack.Screen name="ExpenseForm" component={ExpenseFormScreen} />
+      <Stack.Screen
+        name="ExpenseForm"
+        component={ExpenseFormScreen}
+        options={{ presentation: "fullScreenModal" }}
+      />
       <Stack.Screen name="Categories" component={CategoriesScreen} />
       <Stack.Screen name="Bills" component={BillsScreen} />
       <Stack.Screen name="People" component={PeopleScreen} />

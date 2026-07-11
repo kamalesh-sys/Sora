@@ -111,14 +111,30 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function areSameCategories(current: ExpenseCategory[], next: ExpenseCategory[]) {
+  return current.length === next.length && current.every((category, index) => {
+    const candidate = next[index];
+    return candidate
+      && category.id === candidate.id
+      && category.name === candidate.name
+      && category.icon === candidate.icon
+      && category.color === candidate.color
+      && category.transaction_type === candidate.transaction_type;
+  });
+}
+
 export function ExpenseFormScreen({ navigation, route }: Props) {
   const { colors } = useDs();
   const { success } = useFeedback();
   const { t } = useI18n();
   const amountRef = useRef<TextInput>(null);
+  const categoryRequestRef = useRef(0);
+  const categoryRef = useRef<number | null>(null);
+  const hasFocusedFormRef = useRef(false);
   const expenseId = route.params?.expenseId;
   const isEditing = Boolean(expenseId);
   const initialTransactionType = route.params?.transactionType ?? "expense";
+  const transactionTypeRef = useRef<TransactionType>(initialTransactionType);
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [transactionType, setTransactionType] = useState<TransactionType>(initialTransactionType);
@@ -135,6 +151,10 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [amountTouched, setAmountTouched] = useState(false);
+
+  useEffect(() => {
+    categoryRef.current = category;
+  }, [category]);
 
   const selectedCategory = useMemo(
     () => categories.find((item) => item.id === category) ?? null,
@@ -156,21 +176,26 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   }, [transactionType]);
 
   const fetchCategories = useCallback(async (type: TransactionType, preferredCategory?: number | null) => {
+    const requestId = ++categoryRequestRef.current;
     let categoryRows = await getCategories(type);
     if (!categoryRows.length) {
       categoryRows = await seedDefaultCategories(type);
     }
     categoryRows = await applySavedCategoryOrder(categoryRows, type);
-    setCategories(categoryRows);
 
     const storedCategory = await AsyncStorage.getItem(recentCategoryKey(type));
+    if (requestId !== categoryRequestRef.current) return;
+
     const recentCategoryId = storedCategory ? Number(storedCategory) : NaN;
     const preferred = preferredCategory ?? (Number.isFinite(recentCategoryId) ? recentCategoryId : null);
-    setCategory(
+    const nextCategory =
       preferred && categoryRows.some((item) => item.id === preferred)
         ? preferred
-        : categoryRows[0]?.id ?? null
-    );
+        : categoryRows[0]?.id ?? null;
+
+    categoryRef.current = nextCategory;
+    setCategory((current) => current === nextCategory ? current : nextCategory);
+    setCategories((current) => areSameCategories(current, categoryRows) ? current : categoryRows);
   }, []);
 
   const load = useCallback(async () => {
@@ -182,6 +207,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
       if (expenseId) {
         const transaction = await getTransaction(expenseId);
         const type = transaction.transaction_type ?? "expense";
+        transactionTypeRef.current = type;
         setTransactionType(type);
         await fetchCategories(type, transaction.category);
         setAmount(transaction.amount);
@@ -191,6 +217,7 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         setNote(transaction.note ?? "");
         setDetailsOpen(Boolean(transaction.title || transaction.note));
       } else {
+        transactionTypeRef.current = initialTransactionType;
         await fetchCategories(initialTransactionType);
       }
     } catch {
@@ -207,22 +234,24 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
 
   const refreshCategories = useCallback(async () => {
     try {
-      await fetchCategories(transactionType, category);
+      await fetchCategories(transactionTypeRef.current, categoryRef.current);
     } catch {
       // Keep the current category rail usable when a background refresh fails.
     }
-  }, [category, fetchCategories, transactionType]);
+  }, [fetchCategories]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!loading) {
+      if (hasFocusedFormRef.current) {
         void refreshCategories();
       }
-    }, [loading, refreshCategories])
+      hasFocusedFormRef.current = true;
+    }, [refreshCategories])
   );
 
   const changeTransactionType = async (nextType: TransactionType) => {
     if (nextType === transactionType || categoryLoading) return;
+    transactionTypeRef.current = nextType;
     setTransactionType(nextType);
     setCategoryLoading(true);
     setError("");
@@ -330,7 +359,8 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
   };
 
   return (
-    <AppScreen contentStyle={styles.screenContent}>
+    <>
+      <AppScreen contentStyle={styles.screenContent}>
       <View style={styles.header}>
         <IconButton accessibilityLabel={t("Close add transaction")} icon="close" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
@@ -376,7 +406,10 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
               categories={categories}
               onManage={() => navigation.navigate("Categories", { transactionType })}
               onReorder={reorderCategories}
-              onSelect={setCategory}
+              onSelect={(categoryId) => {
+                categoryRef.current = categoryId;
+                setCategory(categoryId);
+              }}
               selectedId={category}
             />
           )}
@@ -427,12 +460,13 @@ export function ExpenseFormScreen({ navigation, route }: Props) {
         </>
       )}
 
+      </AppScreen>
       <BottomActionBar>
         <AppButton block disabled={saving || loading || categoryLoading} loading={saving} onPress={save}>
           {t(isEditing ? "Save changes" : transactionType === "income" ? "Add income" : "Add expense")}
         </AppButton>
       </BottomActionBar>
-    </AppScreen>
+    </>
   );
 }
 
