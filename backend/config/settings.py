@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import sys
 from pathlib import Path
 from decouple import Csv, config
 import dj_database_url
@@ -27,6 +28,7 @@ def cast_debug(value):
 
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=cast_debug)
+RUNNING_TESTS = "test" in sys.argv
 
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS",
@@ -139,7 +141,13 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+# The Django test client is deliberately HTTP by default. Keep production HTTPS-only,
+# while letting API tests exercise the application rather than a transport redirect.
+SECURE_SSL_REDIRECT = (
+    False
+    if RUNNING_TESTS
+    else config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 SECURE_HSTS_SECONDS = config(

@@ -191,17 +191,6 @@ export function GoalsScreen({ navigation }: Props) {
           </AppCard>
           ) : null}
 
-          {goals.length && templates.length ? (
-            <>
-              <SectionHeader title="Start another goal" />
-              <View style={styles.templateGrid}>
-                {templates.map((template) => (
-                  <GoalTemplateCard key={template.key} onPress={() => openEditor(template)} template={template} />
-                ))}
-              </View>
-            </>
-          ) : null}
-
           {goals.length ? (
             <>
               <View style={styles.goalSectionHeader}>
@@ -257,41 +246,6 @@ export function GoalsScreen({ navigation }: Props) {
         visible={editorOpen}
       />
     </AppScreen>
-  );
-}
-
-function GoalTemplateCard({ onPress, template }: { onPress: () => void; template: GoalTemplate }) {
-  const { colors } = useDs();
-  const color = safeGoalColor(template.color, colors.accent);
-  return (
-    <Pressable
-      accessibilityLabel={`Create ${template.name} goal`}
-      accessibilityRole="button"
-      android_ripple={{ color: colors.press }}
-      onPress={onPress}
-      style={[styles.quickStartCard, { backgroundColor: colors.surface, borderColor: color }]}
-    >
-      <View style={[styles.templateColorBand, { backgroundColor: color }]} />
-      <View style={styles.quickStartTop}>
-        <View style={[styles.quickStartIcon, { backgroundColor: goalColorWash(color) }]}>
-          <MaterialCommunityIcons color={color} name={getGoalIcon(template.icon, template.key)} size={22} />
-        </View>
-        <View style={[styles.templateArrow, { backgroundColor: goalColorWash(color) }]}>
-          <MaterialCommunityIcons color={color} name="arrow-top-right" size={18} />
-        </View>
-      </View>
-      <View style={styles.quickStartText}>
-        <AppText numberOfLines={1} variant="bodyStrong">
-          {template.name}
-        </AppText>
-        <AppText color="textMuted" numberOfLines={2} variant="caption">
-          {template.description}
-        </AppText>
-      </View>
-      <AppText color="textSubtle" variant="caption">
-        {template.suggested_months}-month plan
-      </AppText>
-    </Pressable>
   );
 }
 
@@ -493,31 +447,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: dsSpace[1.5],
   },
-  quickStartCard: {
-    borderRadius: dsRadius.md,
-    borderWidth: 1,
-    flexBasis: "48%",
-    gap: dsSpace[1],
-    minHeight: 148,
-    overflow: "hidden",
-    padding: dsSpace[1.5],
-  },
-  quickStartIcon: {
-    alignItems: "center",
-    borderRadius: dsRadius.md,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
-  quickStartText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  quickStartTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
   skeletonCopy: {
     flex: 1,
     minWidth: 0,
@@ -548,25 +477,5 @@ const styles = StyleSheet.create({
   },
   successText: {
     flex: 1,
-  },
-  templateArrow: {
-    alignItems: "center",
-    borderRadius: dsRadius.pill,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  templateColorBand: {
-    height: 5,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  templateGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: dsSpace[1],
-    marginBottom: dsSpace[2],
   },
 });

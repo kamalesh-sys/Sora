@@ -162,6 +162,7 @@ export function ProfileScreen({ navigation }: Props) {
       <SectionHeader title={t("Manage")} />
       <AppCard>
         <ListRow description={t("Targets, contributions and monthly plans")} icon="target" onPress={() => navigation.navigate("Goals")} title={t("Goals")} />
+        <ListRow description={t("Balances, repayment schedules and payment history")} icon="hand-coin-outline" onPress={() => navigation.navigate("Loans")} title={t("Loans")} />
         <ListRow description={t("Create, edit and seed defaults")} icon="tag-multiple-outline" onPress={() => navigation.navigate("Categories")} title={t("Categories")} />
         <ListRow description={t("People, balances and history")} icon="account-multiple-outline" onPress={() => navigation.navigate("People")} title={t("People")} />
         <ListRow description={t("CSV and PDF are available from Reports")} icon="file-export-outline" onPress={() => navigation.navigate("Reports")} title={t("Export data")} />

@@ -240,7 +240,7 @@ function AccountTray({
 }) {
   const { colors } = useDs();
   const { t } = useAppSettings();
-  const open = (route: "Goals" | "Profile" | "Categories" | "People" | "Reports") => {
+  const open = (route: "Goals" | "Loans" | "Profile" | "Categories" | "People" | "Reports") => {
     onClose();
     navigation.navigate(route);
   };
@@ -271,6 +271,7 @@ function AccountTray({
 
         <View style={[styles.accountLinks, { borderTopColor: colors.border }]}>
           <AccountLink icon="target" label="Goals" onPress={() => open("Goals")} />
+          <AccountLink icon="hand-coin-outline" label="Loans" onPress={() => open("Loans")} />
           <AccountLink icon="tag-multiple-outline" label="Categories" onPress={() => open("Categories")} />
           <AccountLink icon="account-multiple-outline" label="People" onPress={() => open("People")} />
           <AccountLink icon="chart-bar" label="Reports" onPress={() => open("Reports")} />

@@ -12,7 +12,14 @@ import {
   Goal,
   GoalMutationResult,
   GoalTemplate,
+  Loan,
+  LoanPayment,
+  LoanPaymentMutationResult,
+  LoanDirection,
+  LoanStatus,
   SaveGoalPayload,
+  SaveLoanPayload,
+  SaveLoanPaymentPayload,
   SkipGoalResult,
   MonthlyBudget,
   MonthlySummary,
@@ -341,6 +348,45 @@ export async function skipGoalMonth(id: number, month: string) {
 
 export async function undoGoalMonthSkip(goalId: number, skipId: number) {
   const response = await client.delete<GoalMutationResult>(`/goals/${goalId}/skips/${skipId}/`);
+  return response.data;
+}
+
+export async function getLoans(filters: { direction?: LoanDirection; status?: LoanStatus } = {}) {
+  const response = await cachedGet<Loan[] | { results: Loan[] }>("/loans/", { params: filters });
+  return unpackList(response.data);
+}
+
+export async function getLoan(id: number) {
+  const response = await cachedGet<Loan>(`/loans/${id}/`);
+  return response.data;
+}
+
+export async function createLoan(payload: SaveLoanPayload) {
+  const response = await client.post<Loan>("/loans/", payload);
+  return response.data;
+}
+
+export async function updateLoan(id: number, payload: Partial<SaveLoanPayload>) {
+  const response = await client.patch<Loan>(`/loans/${id}/`, payload);
+  return response.data;
+}
+
+export async function deleteLoan(id: number) {
+  await client.delete(`/loans/${id}/`);
+}
+
+export async function getLoanPayments(id: number) {
+  const response = await cachedGet<LoanPayment[]>(`/loans/${id}/payments/`);
+  return response.data;
+}
+
+export async function createLoanPayment(id: number, payload: SaveLoanPaymentPayload) {
+  const response = await client.post<LoanPaymentMutationResult>(`/loans/${id}/payments/`, payload);
+  return response.data;
+}
+
+export async function deleteLoanPayment(loanId: number, paymentId: number) {
+  const response = await client.delete<LoanPaymentMutationResult>(`/loans/${loanId}/payments/${paymentId}/`);
   return response.data;
 }
 

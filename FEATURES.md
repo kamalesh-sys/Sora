@@ -58,6 +58,15 @@ Sora Expense is a mobile-first Indian personal, home, and small-business money m
 - Contribution history, optional expense-linked contributions, month skipping, and restoring skipped months.
 - Goal editing and deletion with accurate refreshes after every action.
 
+## Loans
+
+- Separate borrowed and lent-money records, so loans never distort ordinary income or expense totals.
+- Track the counterparty, original principal, loan type, disbursed date, repayment frequency, planned payment, due date, maturity date, and status.
+- Optional simple annual interest, agreement/reference number, account or UPI reference, collateral, repayment terms, and private notes.
+- A repayment ledger with payment date, method, reference, note, and an auditable principal, interest, and fee split.
+- Automatic repayment allocation applies outstanding interest before principal; manual allocation is available when a lender statement differs.
+- Outstanding principal, accrued interest, paid totals, repayment progress, due-state, and complete repayment history in one place.
+
 ## People and shared spending
 
 - Add people and track whether they owe you or you owe them.
