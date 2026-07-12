@@ -15,7 +15,7 @@ import {
   dsSpace,
   useDs,
 } from "../../design-system";
-import type { Loan, LoanDirection, SaveLoanPayload } from "../../types/api";
+import type { Loan, LoanDirection, LoanRepaymentFrequency, SaveLoanPayload } from "../../types/api";
 import { getTodayDate, isValidDate } from "../../utils/date";
 import { formatDateLabel, parseAmount } from "../../utils/format";
 import {
@@ -30,6 +30,13 @@ type DateFieldKey = "disbursed" | "due";
 const directionItems: Array<{ icon: "arrow-down-left" | "arrow-up-right"; label: string; value: LoanDirection }> = [
   { icon: "arrow-down-left", label: "I borrowed", value: "borrowed" },
   { icon: "arrow-up-right", label: "I lent", value: "lent" },
+];
+
+const repaymentItems: Array<{ label: string; value: LoanRepaymentFrequency }> = [
+  { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
+  { label: "One-time", value: "one_time" },
+  { label: "Custom", value: "custom" },
 ];
 
 export function LoanFormSheet({
@@ -52,6 +59,8 @@ export function LoanFormSheet({
   const [direction, setDirection] = useState<LoanDirection>("borrowed");
   const [counterpartyName, setCounterpartyName] = useState("");
   const [principal, setPrincipal] = useState("");
+  const [repaymentFrequency, setRepaymentFrequency] = useState<LoanRepaymentFrequency>("monthly");
+  const [repaymentAmount, setRepaymentAmount] = useState("");
   const [disbursedDate, setDisbursedDate] = useState(getTodayDate());
   const [nextDueDate, setNextDueDate] = useState("");
   const [showDueDate, setShowDueDate] = useState(false);
@@ -64,6 +73,8 @@ export function LoanFormSheet({
     setDirection(loan?.direction ?? "borrowed");
     setCounterpartyName(loan?.counterparty_name ?? "");
     setPrincipal(loan ? String(parseAmount(loan.principal_amount)) : "");
+    setRepaymentFrequency(loan?.repayment_frequency ?? "monthly");
+    setRepaymentAmount(loan?.planned_payment_amount ? String(parseAmount(loan.planned_payment_amount)) : "");
     setDisbursedDate(loan?.disbursed_date ?? getTodayDate());
     setNextDueDate(existingDueDate);
     setShowDueDate(Boolean(existingDueDate));
@@ -81,6 +92,7 @@ export function LoanFormSheet({
     const nextErrors: Record<string, string> = {};
     if (!counterpartyName.trim()) nextErrors.counterparty = `Add the ${directionCopy.counterparty.toLowerCase()}.`;
     if (parseAmount(principal) <= 0) nextErrors.principal = "Enter an amount above ₹0.";
+    if (repaymentAmount && parseAmount(repaymentAmount) <= 0) nextErrors.repaymentAmount = "Enter an amount above ₹0.";
     if (!isValidDate(disbursedDate) || disbursedDate > getTodayDate()) nextErrors.disbursed = "Choose today or an earlier date.";
     if (showDueDate && (!isValidDate(nextDueDate) || nextDueDate < disbursedDate)) {
       nextErrors.due = "Due date must be on or after the start date.";
@@ -105,10 +117,10 @@ export function LoanFormSheet({
       name: loan?.name || generatedName,
       next_due_date: showDueDate ? nextDueDate : null,
       note: loan?.note ?? "",
-      planned_payment_amount: loan?.planned_payment_amount ?? "0.00",
+      planned_payment_amount: repaymentAmount ? parseAmount(repaymentAmount).toFixed(2) : "0.00",
       principal_amount: parseAmount(principal).toFixed(2),
       reference_number: loan?.reference_number ?? "",
-      repayment_frequency: loan?.repayment_frequency ?? "monthly",
+      repayment_frequency: repaymentFrequency,
       terms_note: loan?.terms_note ?? "",
     });
   };
@@ -154,6 +166,7 @@ export function LoanFormSheet({
       visible={visible}
     >
       <ErrorState text={error} />
+      <AppText color="textMuted" style={styles.sheetLabel} variant="label">Loan direction</AppText>
       <AppSegmentedControl accessibilityLabel="Loan direction" items={directionItems} onChange={setDirection} value={direction} />
 
       <FormField
@@ -168,6 +181,7 @@ export function LoanFormSheet({
         style={styles.field}
         value={counterpartyName}
       />
+      <AppText color="textMuted" style={styles.sheetLabel} variant="label">Loan amount</AppText>
       <AmountInput
         error={fieldErrors.principal}
         onChangeText={(value) => {
@@ -175,6 +189,27 @@ export function LoanFormSheet({
           setFieldError("principal");
         }}
         value={principal}
+      />
+
+      <AppText color="textMuted" style={styles.sheetLabel} variant="label">Repayment schedule</AppText>
+      <AppSegmentedControl
+        accessibilityLabel="Repayment schedule"
+        items={repaymentItems}
+        onChange={setRepaymentFrequency}
+        style={styles.scheduleControl}
+        value={repaymentFrequency}
+      />
+      <FormField
+        error={fieldErrors.repaymentAmount}
+        keyboardType="decimal-pad"
+        label="Repayment amount"
+        onChangeText={(value) => {
+          setRepaymentAmount(sanitizeLoanAmount(value));
+          setFieldError("repaymentAmount");
+        }}
+        placeholder="Amount per repayment"
+        style={styles.field}
+        value={repaymentAmount}
       />
 
       <DateField error={fieldErrors.disbursed} label="Start date" onPress={() => setDatePicker("disbursed")} value={disbursedDate} />
@@ -264,5 +299,6 @@ const styles = StyleSheet.create({
   dueButton: { alignSelf: "flex-start", marginBottom: dsSpace[2] },
   field: { marginBottom: dsSpace[1.5] },
   footerActions: { gap: dsSpace[0.5] },
+  scheduleControl: { marginBottom: dsSpace[1.5] },
   sheetLabel: { marginBottom: dsSpace[0.5] },
 });
