@@ -263,7 +263,7 @@ export function LoanDetailScreen({ navigation, route }: Props) {
           {loan.payments.map((payment) => <PaymentRow key={payment.id} loan={loan} onPress={() => removePayment(payment)} payment={payment} />)}
         </AppCard>
       ) : (
-        <EmptyState body="Every repayment will keep its date, payment method and allocation here." icon="receipt-text-clock-outline" title="No repayments yet" />
+        <EmptyState icon="receipt-text-clock-outline" title="No repayments yet" />
       )}
 
       <LoanFormSheet

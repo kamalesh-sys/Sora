@@ -161,7 +161,6 @@ export function LoansScreen({ navigation }: Props) {
         <IconButton accessibilityLabel={t("Back to profile")} icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
           <AppText variant="title">Loans</AppText>
-          <AppText color="textSubtle" variant="caption">Keep borrowed and lent money clear</AppText>
         </View>
         <IconButton accessibilityLabel={t("Create loan")} icon="plus" onPress={openCreate} tone="primary" />
       </View>
@@ -186,14 +185,13 @@ export function LoansScreen({ navigation }: Props) {
                   <LoanCard key={loan.id} loan={loan} onPress={() => navigation.push("LoanDetail", { loanId: loan.id })} />
                 ))
               ) : (
-                <EmptyState action="Add loan" body="No loans match this view." icon="filter-variant" onAction={openCreate} title="Nothing here yet" />
+                <EmptyState action="Add loan" icon="filter-variant" onAction={openCreate} title="Nothing here yet" />
               )}
             </>
           ) : (
             <EmptyState
               action="Add a loan"
               actionSpacing="loose"
-              body="Keep repayments, due dates and reference details in one private record."
               icon="hand-coin-outline"
               onAction={openCreate}
               title="No loans yet"

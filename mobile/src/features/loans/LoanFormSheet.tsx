@@ -49,7 +49,6 @@ export function LoanFormSheet({
   saving: boolean;
   visible: boolean;
 }) {
-  const { colors } = useDs();
   const [direction, setDirection] = useState<LoanDirection>("borrowed");
   const [counterpartyName, setCounterpartyName] = useState("");
   const [principal, setPrincipal] = useState("");
@@ -156,9 +155,6 @@ export function LoanFormSheet({
     >
       <ErrorState text={error} />
       <AppSegmentedControl accessibilityLabel="Loan direction" items={directionItems} onChange={setDirection} value={direction} />
-      <AppText color="textSubtle" style={styles.directionHint} variant="caption">
-        {direction === "borrowed" ? "Track what you need to pay back." : "Track money that should come back to you."}
-      </AppText>
 
       <FormField
         autoFocus={!loan}
@@ -180,9 +176,6 @@ export function LoanFormSheet({
         }}
         value={principal}
       />
-      <AppText color="textMuted" style={styles.amountHint} variant="caption">
-        Amount {direction === "borrowed" ? "borrowed" : "lent"}
-      </AppText>
 
       <DateField error={fieldErrors.disbursed} label="Start date" onPress={() => setDatePicker("disbursed")} value={disbursedDate} />
       {showDueDate ? (
@@ -206,12 +199,6 @@ export function LoanFormSheet({
           Add repayment due date
         </AppButton>
       )}
-      <View style={[styles.reassurance, { backgroundColor: colors.chipBg }]}>
-        <MaterialCommunityIcons color={colors.accent} name="receipt-text-clock-outline" size={20} />
-        <AppText color="textMuted" style={styles.reassuranceCopy} variant="caption">
-          Record repayments later from this loan’s page.
-        </AppText>
-      </View>
 
       {datePicker ? (
         <View style={styles.datePickerWrap}>
@@ -268,18 +255,14 @@ function DateField({
 }
 
 const styles = StyleSheet.create({
-  amountHint: { marginBottom: dsSpace[2], marginTop: dsSpace[0.5], textAlign: "center" },
   dateError: { marginTop: dsSpace[0.5] },
   dateField: { alignItems: "center", borderRadius: dsRadius.sm, borderWidth: 1, flexDirection: "row", gap: dsSpace[1], minHeight: 56, paddingHorizontal: dsSpace[1.5] },
   dateFieldWrap: { marginBottom: dsSpace[1.5] },
   dateLabelRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   datePickerWrap: { gap: dsSpace[1], marginBottom: dsSpace[2] },
   dateValue: { flex: 1 },
-  directionHint: { marginBottom: dsSpace[2], marginTop: dsSpace[1] },
   dueButton: { alignSelf: "flex-start", marginBottom: dsSpace[2] },
   field: { marginBottom: dsSpace[1.5] },
   footerActions: { gap: dsSpace[0.5] },
-  reassurance: { alignItems: "center", borderRadius: dsRadius.md, flexDirection: "row", gap: dsSpace[1], marginBottom: dsSpace[2], padding: dsSpace[1.5] },
-  reassuranceCopy: { flex: 1 },
   sheetLabel: { marginBottom: dsSpace[0.5] },
 });
