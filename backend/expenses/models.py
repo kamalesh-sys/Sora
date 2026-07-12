@@ -903,3 +903,193 @@ class GoalMonthSkip(models.Model):
 
     def __str__(self):
         return f"{self.goal} - {self.month:%Y-%m}"
+
+
+class Loan(models.Model):
+    """A personal loan contract tracked independently from the cash transaction ledger."""
+
+    class Direction(models.TextChoices):
+        BORROWED = "borrowed", "Borrowed"
+        LENT = "lent", "Lent"
+
+    class LoanType(models.TextChoices):
+        PERSONAL = "personal", "Personal"
+        HOME = "home", "Home"
+        BUSINESS = "business", "Business"
+        VEHICLE = "vehicle", "Vehicle"
+        EDUCATION = "education", "Education"
+        CREDIT = "credit", "Credit"
+        OTHER = "other", "Other"
+
+    class InterestType(models.TextChoices):
+        NONE = "none", "No interest"
+        SIMPLE = "simple", "Simple annual interest"
+
+    class RepaymentFrequency(models.TextChoices):
+        ONE_TIME = "one_time", "One time"
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+        CUSTOM = "custom", "Custom"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CLOSED = "closed", "Closed"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="loans",
+        on_delete=models.CASCADE,
+    )
+    person = models.ForeignKey(
+        Person,
+        null=True,
+        blank=True,
+        related_name="loans",
+        on_delete=models.SET_NULL,
+    )
+    direction = models.CharField(max_length=12, choices=Direction.choices)
+    name = models.CharField(max_length=150)
+    counterparty_name = models.CharField(max_length=150)
+    loan_type = models.CharField(
+        max_length=20,
+        choices=LoanType.choices,
+        default=LoanType.PERSONAL,
+    )
+    principal_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    annual_interest_rate = models.DecimalField(max_digits=7, decimal_places=4, default=0)
+    interest_type = models.CharField(
+        max_length=12,
+        choices=InterestType.choices,
+        default=InterestType.NONE,
+    )
+    disbursed_date = models.DateField()
+    interest_start_date = models.DateField(null=True, blank=True)
+    repayment_frequency = models.CharField(
+        max_length=16,
+        choices=RepaymentFrequency.choices,
+        default=RepaymentFrequency.MONTHLY,
+    )
+    planned_payment_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    next_due_date = models.DateField(null=True, blank=True)
+    maturity_date = models.DateField(null=True, blank=True)
+    reference_number = models.CharField(max_length=100, blank=True)
+    account_reference = models.CharField(max_length=100, blank=True)
+    collateral_note = models.TextField(blank=True)
+    terms_note = models.TextField(blank=True)
+    note = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ACTIVE)
+    closed_on = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "next_due_date", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "status", "next_due_date"]),
+            models.Index(fields=["user", "direction", "status"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(principal_amount__gt=0),
+                name="loan_principal_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(annual_interest_rate__gte=0),
+                name="loan_interest_rate_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(planned_payment_amount__gte=0),
+                name="loan_planned_payment_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=(Q(status="active") & Q(closed_on__isnull=True))
+                | (Q(status="closed") & Q(closed_on__isnull=False)),
+                name="loan_closure_state_consistent",
+            ),
+        ]
+
+    def clean(self):
+        if not self.counterparty_name.strip():
+            raise ValidationError("A loan requires a lender or borrower name.")
+        if self.person_id and self.person.owner_id != self.user_id:
+            raise ValidationError("Person must belong to the loan owner.")
+        if self.interest_type == self.InterestType.NONE and self.annual_interest_rate:
+            raise ValidationError("A no-interest loan cannot have an interest rate.")
+        if self.next_due_date and self.next_due_date < self.disbursed_date:
+            raise ValidationError("The next due date cannot be before the disbursement date.")
+        if self.maturity_date and self.maturity_date < self.disbursed_date:
+            raise ValidationError("The maturity date cannot be before the disbursement date.")
+        if self.interest_start_date and self.interest_start_date < self.disbursed_date:
+            raise ValidationError("Interest cannot start before the disbursement date.")
+        if self.status == self.Status.ACTIVE and self.closed_on is not None:
+            raise ValidationError("An active loan cannot have a closing date.")
+        if self.status == self.Status.CLOSED and self.closed_on is None:
+            raise ValidationError("A closed loan requires a closing date.")
+
+    def save(self, *args, **kwargs):
+        if self.person_id and not self.counterparty_name:
+            self.counterparty_name = self.person.name
+        if not self.interest_start_date:
+            self.interest_start_date = self.disbursed_date
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.name} - {self.counterparty_name}"
+
+
+class LoanPayment(models.Model):
+    """A dated repayment allocation; each amount is explicitly split for auditability."""
+
+    loan = models.ForeignKey(Loan, related_name="payments", on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    principal_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    interest_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    fee_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    payment_date = models.DateField()
+    payment_method = models.CharField(
+        max_length=20,
+        choices=Expense.PaymentMethod.choices,
+        default=Expense.PaymentMethod.UPI,
+    )
+    reference_number = models.CharField(max_length=100, blank=True)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-payment_date", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["loan", "payment_date"]),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="loan_payment_amount_positive"),
+            models.CheckConstraint(
+                condition=Q(principal_amount__gte=0)
+                & Q(interest_amount__gte=0)
+                & Q(fee_amount__gte=0),
+                name="loan_payment_components_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    amount=models.F("principal_amount")
+                    + models.F("interest_amount")
+                    + models.F("fee_amount")
+                ),
+                name="loan_payment_components_match_total",
+            ),
+        ]
+
+    def clean(self):
+        if self.payment_date and self.loan_id and self.payment_date < self.loan.disbursed_date:
+            raise ValidationError("A repayment cannot predate loan disbursement.")
+        component_total = self.principal_amount + self.interest_amount + self.fee_amount
+        if component_total != self.amount:
+            raise ValidationError("Repayment components must equal the total amount.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.loan} repayment - {self.amount}"

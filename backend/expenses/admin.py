@@ -12,6 +12,8 @@ from .models import (
     Household,
     HouseholdMember,
     MonthlyBudget,
+    Loan,
+    LoanPayment,
     PeopleInvitation,
     Person,
     RecurringBill,
@@ -207,3 +209,37 @@ class GoalMonthSkipAdmin(admin.ModelAdmin):
     list_filter = ["month", "created_at"]
     readonly_fields = ["created_at"]
     date_hierarchy = "month"
+
+
+class LoanPaymentInline(admin.TabularInline):
+    model = LoanPayment
+    extra = 0
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(Loan)
+class LoanAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "user",
+        "direction",
+        "counterparty_name",
+        "principal_amount",
+        "annual_interest_rate",
+        "next_due_date",
+        "status",
+    ]
+    search_fields = ["name", "counterparty_name", "reference_number", "account_reference", "user__email"]
+    list_filter = ["direction", "loan_type", "interest_type", "repayment_frequency", "status"]
+    readonly_fields = ["status", "closed_on", "created_at", "updated_at"]
+    date_hierarchy = "disbursed_date"
+    inlines = [LoanPaymentInline]
+
+
+@admin.register(LoanPayment)
+class LoanPaymentAdmin(admin.ModelAdmin):
+    list_display = ["loan", "amount", "principal_amount", "interest_amount", "fee_amount", "payment_date"]
+    search_fields = ["loan__name", "loan__counterparty_name", "reference_number", "note"]
+    list_filter = ["payment_method", "payment_date"]
+    readonly_fields = ["created_at", "updated_at"]
+    date_hierarchy = "payment_date"

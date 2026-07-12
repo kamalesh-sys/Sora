@@ -10,6 +10,7 @@ from .views import (
     GoalViewSet,
     HouseholdViewSet,
     MonthlyBudgetViewSet,
+    LoanViewSet,
     PersonViewSet,
     RecurringBillViewSet,
     SettlementViewSet,
@@ -32,6 +33,7 @@ router.register("recurring-bills", RecurringBillViewSet, basename="recurring-bil
 router.register("bill-occurrences", BillOccurrenceViewSet, basename="bill-occurrence")
 router.register("settlements", SettlementViewSet, basename="settlement")
 router.register("goals", GoalViewSet, basename="goal")
+router.register("loans", LoanViewSet, basename="loan")
 
 urlpatterns = [
     path("auth/register/", register, name="auth-register"),

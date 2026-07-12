@@ -21,6 +21,8 @@ from .models import (
     GoalMonthSkip,
     HouseholdMember,
     MonthlyBudget,
+    Loan,
+    LoanPayment,
     Person,
     RecurringBill,
     Settlement,
@@ -41,6 +43,8 @@ from .serializers import (
     HouseholdMemberSerializer,
     HouseholdSerializer,
     MonthlyBudgetSerializer,
+    LoanPaymentSerializer,
+    LoanSerializer,
     CreatePeopleInvitationSerializer,
     PeopleInvitationSerializer,
     PersonSerializer,
@@ -132,6 +136,8 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ExpenseCategory.objects.filter(user=self.request.user)
+        if self.action in {"retrieve", "update", "partial_update", "destroy"}:
+            return queryset
         transaction_type = (
             self.request.query_params.get("transaction_type")
             or ExpenseCategory.TransactionType.EXPENSE
@@ -568,6 +574,97 @@ class BillOccurrenceViewSet(viewsets.ReadOnlyModelViewSet):
     def skip(self, request, pk=None):
         occurrence = mark_occurrence_skipped(request.user, self.get_object())
         return Response(BillOccurrenceSerializer(occurrence).data)
+
+
+class LoanViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanSerializer
+
+    def get_queryset(self):
+        queryset = (
+            Loan.objects.filter(user=self.request.user)
+            .select_related("person")
+            .prefetch_related("payments")
+            .order_by("status", "next_due_date", "-created_at", "-id")
+        )
+        direction = self.request.query_params.get("direction")
+        if direction:
+            if direction not in Loan.Direction.values:
+                raise ValidationError(
+                    {"direction": f"Direction must be one of: {', '.join(Loan.Direction.values)}."}
+                )
+            queryset = queryset.filter(direction=direction)
+        loan_status = self.request.query_params.get("status")
+        if loan_status:
+            if loan_status not in Loan.Status.values:
+                raise ValidationError(
+                    {"status": f"Status must be one of: {', '.join(Loan.Status.values)}."}
+                )
+            queryset = queryset.filter(status=loan_status)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        if instance.payments.exists():
+            raise ValidationError(
+                {"detail": "A loan with repayments cannot be deleted. Keep the repayment ledger or remove its repayments first."}
+            )
+        instance.delete()
+
+    def _fresh_loan(self, loan_id):
+        return (
+            Loan.objects.filter(user=self.request.user)
+            .select_related("person")
+            .prefetch_related("payments")
+            .get(pk=loan_id)
+        )
+
+    @action(detail=True, methods=["get", "post"], url_path="payments")
+    def payments(self, request, pk=None):
+        loan = self.get_object()
+        if request.method == "GET":
+            return Response(LoanPaymentSerializer(loan.payments.all(), many=True).data)
+
+        with transaction.atomic():
+            locked_loan = Loan.objects.select_for_update().get(pk=loan.pk, user=request.user)
+            payment_serializer = LoanPaymentSerializer(
+                data=request.data,
+                context={"loan": locked_loan, "request": request},
+            )
+            payment_serializer.is_valid(raise_exception=True)
+            payment = payment_serializer.save(loan=locked_loan)
+            from .services.loans import synchronize_loan_status
+
+            synchronize_loan_status(locked_loan, closed_on=payment.payment_date)
+
+        fresh_loan = self._fresh_loan(loan.pk)
+        return Response(
+            {
+                "loan": self.get_serializer(fresh_loan).data,
+                "payment": LoanPaymentSerializer(payment).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"payments/(?P<payment_id>[^/.]+)",
+    )
+    def payment_detail(self, request, pk=None, payment_id=None):
+        loan = self.get_object()
+        with transaction.atomic():
+            locked_loan = Loan.objects.select_for_update().get(pk=loan.pk, user=request.user)
+            payment = locked_loan.payments.select_for_update().filter(pk=payment_id).first()
+            if payment is None:
+                raise ValidationError({"payment": "Repayment not found."})
+            payment.delete()
+            from .services.loans import synchronize_loan_status
+
+            synchronize_loan_status(locked_loan)
+
+        return Response({"loan": self.get_serializer(self._fresh_loan(loan.pk)).data})
 
 
 class GoalViewSet(viewsets.ModelViewSet):
