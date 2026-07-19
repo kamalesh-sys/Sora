@@ -60,43 +60,43 @@ export const dsTypography = {
     lineHeight: 48,
   },
   amount: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_400Regular", // Matches CDS display2 (48px, 400w) used for big amounts
     fontSize: 48,
-    fontWeight: "600" as const,
+    fontWeight: "400" as const,
     lineHeight: 56,
   },
   title: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold", // Matches CDS title1
     fontSize: 28,
     fontWeight: "600" as const,
     lineHeight: 36,
   },
   headline: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold", // Matches CDS headline
     fontSize: 16,
     fontWeight: "600" as const,
     lineHeight: 24,
   },
   bodyStrong: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold", // Maps to CDS headline / title4
     fontSize: 16,
     fontWeight: "600" as const,
     lineHeight: 24,
   },
   body: {
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_400Regular", // Matches CDS body
     fontSize: 16,
     fontWeight: "400" as const,
     lineHeight: 24,
   },
   label: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold", // Matches CDS label1
     fontSize: 14,
     fontWeight: "600" as const,
     lineHeight: 20,
   },
   caption: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold", // Matches CDS caption
     fontSize: 13,
     fontWeight: "600" as const,
     lineHeight: 16,

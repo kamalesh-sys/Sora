@@ -6,7 +6,7 @@ import {
   Inter_800ExtraBold,
   Inter_900Black,
 } from "@expo-google-fonts/inter";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFonts } from "expo-font";
 import * as NavigationBar from "expo-navigation-bar";
 import { NavigationContainer, type LinkingOptions } from "@react-navigation/native";
@@ -124,8 +124,16 @@ function BootGate({
 }) {
   const { initializing } = useAuth();
   const statusBarStyle = themeMode === "dark" ? "light" : "dark";
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
 
-  if (!fontsLoaded || !settingsReady || initializing) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinTimeElapsed(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!fontsLoaded || !settingsReady || initializing || !minTimeElapsed) {
     return (
       <>
         <StatusBar style={statusBarStyle} />

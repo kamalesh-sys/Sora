@@ -219,11 +219,9 @@ export function ExpensesScreen({ navigation }: Props) {
             <AppCard>
               {section.data.map((expense) => {
                 const visual = getCategoryVisual(expense.category_detail?.name, expense.category_detail?.icon, expense.category_detail?.color);
-                const showDate = !["today", "yesterday"].includes(getDateGroupKey(expense.expense_date));
                 const meta = [
                   expense.category_detail?.name ?? t("Uncategorized"),
                   formatPaymentMethod(expense.payment_method),
-                  showDate ? formatDateLabel(expense.expense_date) : null,
                 ].filter(Boolean).join(" | ");
                 return (
                   <ListRow
@@ -391,18 +389,14 @@ function getDateGroupKey(value: string) {
   const days = getDaysFromToday(value);
   if (days === 0) return "today";
   if (days === 1) return "yesterday";
-  if (days >= 2 && days <= 6) return "this-week";
-  if (days >= 7 && days <= 13) return "last-week";
-  return value.slice(0, 7);
+  return value;
 }
 
 function getDateGroupTitle(value: string, t: Translate) {
   const days = getDaysFromToday(value);
   if (days === 0) return t("Today");
   if (days === 1) return t("Yesterday");
-  if (days >= 2 && days <= 6) return t("This Week");
-  if (days >= 7 && days <= 13) return t("Last Week");
-  return formatMonthLabel(value.slice(0, 7));
+  return formatDateLabel(value);
 }
 
 function getDaysFromToday(value: string) {
