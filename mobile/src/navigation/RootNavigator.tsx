@@ -7,8 +7,6 @@ import { CategoriesScreen } from "../screens/CategoriesScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { ExpenseFormScreen } from "../screens/ExpenseFormScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
-import { GoalDetailScreen } from "../screens/GoalDetailScreen";
-import { GoalsScreen } from "../screens/GoalsScreen";
 import { PeopleScreen } from "../screens/PeopleScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ReportsScreen } from "../screens/ReportsScreen";
@@ -19,8 +17,6 @@ export type RootStackParamList = {
   Categories: { transactionType?: TransactionType } | undefined;
   ExpenseForm: { expenseId?: number; transactionType?: TransactionType } | undefined;
   Expenses: undefined;
-  GoalDetail: { created?: boolean; goalId: number };
-  Goals: undefined;
   Home: undefined;
   People: undefined;
   Profile: undefined;
@@ -47,8 +43,6 @@ export function RootNavigator() {
     >
       <Stack.Screen name="Home" component={DashboardScreen} />
       <Stack.Screen name="Expenses" component={ExpensesScreen} />
-      <Stack.Screen name="Goals" component={GoalsScreen} />
-      <Stack.Screen name="GoalDetail" component={GoalDetailScreen} />
       <Stack.Screen
         name="ExpenseForm"
         component={ExpenseFormScreen}

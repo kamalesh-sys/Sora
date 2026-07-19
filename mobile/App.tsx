@@ -30,11 +30,6 @@ const linking: LinkingOptions<RootStackParamList> = {
       Categories: "categories",
       ExpenseForm: "add-expense",
       Expenses: "expenses",
-      GoalDetail: {
-        path: "goals/:goalId",
-        parse: { goalId: Number },
-      },
-      Goals: "goals",
       Home: "home",
       People: "people",
       Profile: "profile",

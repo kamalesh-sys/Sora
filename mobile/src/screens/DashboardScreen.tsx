@@ -173,7 +173,6 @@ export function DashboardScreen({ navigation }: Props) {
             <View style={styles.quickGrid}>
               <QuickAction icon="arrow-up-right" label="Expense" onPress={() => navigation.navigate("ExpenseForm", { transactionType: "expense" })} />
               <QuickAction icon="arrow-down-left" label="Income" onPress={() => navigation.navigate("ExpenseForm", { transactionType: "income" })} />
-              <QuickAction icon="target" label="Goals" onPress={() => navigation.navigate("Goals")} />
               <QuickAction icon="account-multiple-outline" label="People" onPress={() => navigation.navigate("People")} />
             </View>
           </AppCard>
@@ -240,9 +239,9 @@ function AccountTray({
 }) {
   const { colors } = useDs();
   const { t } = useAppSettings();
-  const open = (route: "Goals" | "Profile" | "Categories" | "People" | "Reports") => {
+  const open = (route: "Profile" | "Categories" | "People" | "Reports") => {
     onClose();
-    navigation.navigate(route);
+    navigation.navigate(route as any);
   };
 
   return (
@@ -270,7 +269,6 @@ function AccountTray({
         </AppButton>
 
         <View style={[styles.accountLinks, { borderTopColor: colors.border }]}>
-          <AccountLink icon="target" label="Goals" onPress={() => open("Goals")} />
           <AccountLink icon="tag-multiple-outline" label="Categories" onPress={() => open("Categories")} />
           <AccountLink icon="account-multiple-outline" label="People" onPress={() => open("People")} />
           <AccountLink icon="chart-bar" label="Reports" onPress={() => open("Reports")} />

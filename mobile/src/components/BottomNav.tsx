@@ -1,4 +1,4 @@
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -88,7 +88,7 @@ function NavItemButton({
   onPress: () => void;
   responsive: ReturnType<typeof useSoraResponsive>;
 }) {
-  const { colors, language } = useAppSettings();
+  const { colors } = useAppSettings();
   const { navTap } = useFeedback();
   const isAdd = item.key === "Add";
   const iconColor = isAdd ? "#ffffff" : active ? colors.accent : colors.muted;
@@ -133,26 +133,10 @@ function NavItemButton({
         >
           <MaterialCommunityIcons
             name={item.icon}
-            size={isAdd ? Math.round(responsive.nav.fabSize * 0.5) : responsive.nav.iconSize + 3}
+            size={isAdd ? Math.round(responsive.nav.fabSize * 0.5) : responsive.nav.iconSize}
             color={iconColor}
           />
         </View>
-        {!isAdd ? (
-          <Text
-            maxFontSizeMultiplier={responsive.maxFontScale}
-            numberOfLines={1}
-            style={[
-              styles.label,
-              {
-                color: active ? colors.accent : colors.muted,
-                fontSize: responsive.nav.label,
-                fontFamily: language === "en" ? "Inter_600SemiBold" : "sans-serif-medium",
-              },
-            ]}
-          >
-            {item.label}
-          </Text>
-        ) : null}
       </View>
     </Pressable>
   );
@@ -203,21 +187,12 @@ const styles = StyleSheet.create({
   iconBox: {
     alignItems: "center",
     borderRadius: 18,
-    height: 38,
     justifyContent: "center",
-    width: 46,
   },
   addBox: {
     elevation: 10,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
-  },
-  label: {
-    includeFontPadding: false,
-    lineHeight: 14,
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2,
   },
 });

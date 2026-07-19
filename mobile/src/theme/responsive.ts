@@ -25,8 +25,8 @@ export function useSoraResponsive() {
       tinyWidth,
       width,
       dashboard: {
-        actionIcon: tiny ? 54 : compact ? 60 : 72,
-        actionIconSize: tiny ? 24 : compact ? 26 : 30,
+        actionIcon: tiny ? 56 : compact ? 62 : 76,
+        actionIconSize: tiny ? 26 : compact ? 28 : 32,
         actionLabel: tiny ? 12 : compact ? 13 : 15,
         balanceAmount: tiny ? 25 : compact ? 28 : 32,
         balanceFooter: tiny ? 12 : compact ? 13 : 15,
@@ -40,7 +40,7 @@ export function useSoraResponsive() {
         chartWidth: tiny ? 70 : compact ? 84 : 112,
         contentPaddingX: tiny ? 16 : compact ? 20 : 24,
         greeting: tiny ? 19 : compact ? 21 : 24,
-        headerIcon: tiny ? 28 : compact ? 30 : 32,
+        headerIcon: tiny ? 30 : compact ? 32 : 34,
         headerMarginBottom: tiny ? 18 : compact ? 22 : 26,
         monthPillFont: tiny ? 14 : compact ? 16 : 18,
         sectionGap: tiny ? 24 : compact ? 28 : 34,
@@ -51,11 +51,11 @@ export function useSoraResponsive() {
         spendingMinHeight: tiny ? 160 : compact ? 172 : 190,
       },
       nav: {
-        fabSize: tiny ? 56 : compact ? 60 : 68,
-        height: tiny ? 72 : compact ? 78 : 86,
-        iconBoxHeight: tiny ? 34 : compact ? 36 : 38,
-        iconBoxWidth: tiny ? 40 : compact ? 42 : 46,
-        iconSize: tiny ? 20 : compact ? 21 : 23,
+        fabSize: tiny ? 60 : compact ? 64 : 72,
+        height: tiny ? 76 : compact ? 82 : 90,
+        iconBoxHeight: tiny ? 36 : compact ? 38 : 42,
+        iconBoxWidth: tiny ? 44 : compact ? 46 : 52,
+        iconSize: tiny ? 24 : compact ? 26 : 28,
         label: tiny ? 10 : 11,
         paddingBottom: tiny ? 8 : compact ? 10 : 14,
         paddingHorizontal: tiny ? 8 : compact ? 10 : 14,
@@ -63,7 +63,7 @@ export function useSoraResponsive() {
       },
       screen: {
         contentPaddingX: tiny ? 14 : compact ? 16 : 18,
-        bottomNavPadding: tiny ? 92 : compact ? 104 : 118,
+        bottomNavPadding: tiny ? 96 : compact ? 108 : 124,
       },
     };
   }, [fontScale, height, width]);

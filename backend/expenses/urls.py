@@ -7,7 +7,6 @@ from .views import (
     CategoryBudgetViewSet,
     ExpenseCategoryViewSet,
     ExpenseViewSet,
-    GoalViewSet,
     HouseholdViewSet,
     MonthlyBudgetViewSet,
     PersonViewSet,
@@ -31,7 +30,7 @@ router.register("category-budgets", CategoryBudgetViewSet, basename="category-bu
 router.register("recurring-bills", RecurringBillViewSet, basename="recurring-bill")
 router.register("bill-occurrences", BillOccurrenceViewSet, basename="bill-occurrence")
 router.register("settlements", SettlementViewSet, basename="settlement")
-router.register("goals", GoalViewSet, basename="goal")
+
 
 urlpatterns = [
     path("auth/register/", register, name="auth-register"),
