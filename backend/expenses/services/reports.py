@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
@@ -8,80 +8,45 @@ from xml.sax.saxutils import escape
 from django.utils import timezone
 from django.db.models import Count, Q, Sum
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm, mm
-from reportlab.platypus import (
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-    HRFlowable,
-)
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from expenses.models import Expense, MonthlyBudget
 
-
-# ─── palette (monochrome — only values differ) ────────────────────────────────
-INK        = colors.HexColor("#0D0D0D")
-INK_MUTED  = colors.HexColor("#6B6B6B")
-INK_FAINT  = colors.HexColor("#AAAAAA")
-RULE       = colors.HexColor("#D8D8D8")
-ROW_ALT    = colors.HexColor("#F8F8F8")
-PAGE_W, PAGE_H = A4
-MARGIN = 1.6 * cm
-
-
-# ─── money helpers ────────────────────────────────────────────────────────────
 
 def money(value):
     amount = value or Decimal("0.00")
     return str(amount.quantize(Decimal("0.01")))
 
 
-def fmt(value):
-    """Format as ₹1,23,456.00 (Indian grouping)."""
-    d = Decimal(str(value or "0.00"))
-    is_neg = d < 0
-    d = abs(d)
-    integer_part, _, frac_part = f"{d:.2f}".partition(".")
-    # Indian grouping: last 3 then groups of 2
-    s = integer_part
-    if len(s) > 3:
-        s = s[:-3] + "," + s[-3:]
-        i = len(s) - 7
-        while i > 0:
-            s = s[:i] + "," + s[i:]
-            i -= 2
-    result = f"₹{s}.{frac_part}"
-    return f"−{result}" if is_neg else result
+def display_money(value):
+    return f"INR {money(Decimal(str(value or '0.00')))}"
 
-
-# ─── date helpers ─────────────────────────────────────────────────────────────
 
 def parse_month_range(value):
     if not value:
         raise ValueError("month query parameter is required in YYYY-MM format.")
+
     try:
         year_text, month_text = value.split("-", 1)
         start = date(int(year_text), int(month_text), 1)
     except (TypeError, ValueError):
         raise ValueError("month must use YYYY-MM format.")
+
     end = date(start.year, start.month, monthrange(start.year, start.month)[1])
     return start, end
 
 
-# ─── queryset helpers ─────────────────────────────────────────────────────────
-
 def get_monthly_transactions(start, end, user=None):
-    qs = Expense.objects.select_related("category").filter(
+    queryset = Expense.objects.select_related("category").filter(
         expense_date__range=(start, end)
     )
     if user is not None:
-        qs = qs.filter(user=user, household__isnull=True)
-    return qs
+        queryset = queryset.filter(user=user, household__isnull=True)
+    return queryset
 
 
 def get_monthly_expenses(start, end, user=None):
@@ -97,380 +62,413 @@ def get_monthly_income(start, end, user=None):
 
 
 def get_wallet_balance(user=None):
-    income_qs = Expense.objects.filter(transaction_type=Expense.TransactionType.INCOME)
-    expense_qs = Expense.objects.filter(transaction_type=Expense.TransactionType.EXPENSE)
+    transactions = Expense.objects.all()
+    income = transactions.filter(transaction_type=Expense.TransactionType.INCOME)
+    expenses = transactions.filter(transaction_type=Expense.TransactionType.EXPENSE)
     if user is not None:
-        income_qs = income_qs.filter(user=user)
-        expense_qs = expense_qs.filter(
-            Q(paid_by_user=user) | Q(user=user, paid_by_user__isnull=True)
-        )
-    total_income  = income_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
-    total_expense = expense_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+        income = income.filter(user=user)
+        expenses = expenses.filter(Q(paid_by_user=user) | Q(user=user, paid_by_user__isnull=True))
+    total_income = (
+        income
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0.00")
+    )
+    total_expense = (
+        expenses
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0.00")
+    )
     return total_income - total_expense
 
 
 def get_monthly_report_data(start, end, user=None):
     expenses = get_monthly_expenses(start, end, user=user)
-    income   = get_monthly_income(start, end, user=user)
-    budgets  = MonthlyBudget.objects.filter(month=start)
+    income = get_monthly_income(start, end, user=user)
+    budgets = MonthlyBudget.objects.filter(month=start)
     if user is not None:
         budgets = budgets.filter(user=user)
 
-    total_expense = expenses.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
-    total_income  = income.aggregate(t=Sum("amount"))["t"]   or Decimal("0.00")
-    total_budget  = budgets.aggregate(t=Sum("amount"))["t"]  or Decimal("0.00")
-    balance       = total_budget - total_expense
+    total_expense = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_income = income.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_budget = budgets.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    balance = total_budget - total_expense
     net_cash_flow = total_income - total_expense
 
-    def _cat_rows(qs):
-        return list(
-            qs.values("category_id", "category__name")
-            .annotate(total=Sum("amount"), count=Count("id"))
-            .order_by("-total", "category__name")
-        )
-
-    def _pm_rows(qs):
-        return list(
-            qs.values("payment_method")
-            .annotate(total=Sum("amount"), count=Count("id"))
-            .order_by("-total", "payment_method")
-        )
+    category_rows = (
+        expenses.values("category_id", "category__name")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "category__name")
+    )
+    payment_method_rows = (
+        expenses.values("payment_method")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "payment_method")
+    )
+    income_category_rows = (
+        income.values("category_id", "category__name")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "category__name")
+    )
+    income_payment_method_rows = (
+        income.values("payment_method")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("-total", "payment_method")
+    )
 
     return {
-        "month":              start.strftime("%Y-%m"),
-        "month_label":        start.strftime("%B %Y"),
-        "total_expense":      money(total_expense),
-        "total_income":       money(total_income),
-        "total_budget":       money(total_budget),
-        "balance":            money(balance),
-        "net_cash_flow":      money(net_cash_flow),
-        "wallet_balance":     money(get_wallet_balance(user=user)),
-        "expense_count":      expenses.count(),
-        "income_count":       income.count(),
-        "transaction_count":  expenses.count() + income.count(),
+        "month": start.strftime("%Y-%m"),
+        "total_expense": money(total_expense),
+        "total_income": money(total_income),
+        "total_budget": money(total_budget),
+        "balance": money(balance),
+        "net_cash_flow": money(net_cash_flow),
+        "wallet_balance": money(get_wallet_balance(user=user)),
         "category_breakdown": [
-            {"category_name": r["category__name"] or "Uncategorized",
-             "total": money(r["total"]), "count": r["count"]}
-            for r in _cat_rows(expenses)
+            {
+                "category_id": row["category_id"],
+                "category_name": row["category__name"] or "Uncategorized",
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in category_rows
         ],
         "payment_method_breakdown": [
-            {"payment_method": r["payment_method"],
-             "total": money(r["total"]), "count": r["count"]}
-            for r in _pm_rows(expenses)
+            {
+                "payment_method": row["payment_method"],
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in payment_method_rows
         ],
         "income_category_breakdown": [
-            {"category_name": r["category__name"] or "Uncategorized",
-             "total": money(r["total"]), "count": r["count"]}
-            for r in _cat_rows(income)
+            {
+                "category_id": row["category_id"],
+                "category_name": row["category__name"] or "Uncategorized",
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in income_category_rows
         ],
         "income_payment_method_breakdown": [
-            {"payment_method": r["payment_method"],
-             "total": money(r["total"]), "count": r["count"]}
-            for r in _pm_rows(income)
+            {
+                "payment_method": row["payment_method"],
+                "total": money(row["total"]),
+                "count": row["count"],
+            }
+            for row in income_payment_method_rows
         ],
+        "expense_count": expenses.count(),
+        "income_count": income.count(),
+        "transaction_count": expenses.count() + income.count(),
     }
 
-
-# ─── CSV export (unchanged) ───────────────────────────────────────────────────
 
 def build_expenses_csv(expenses):
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(["Date", "Type", "Title", "Category", "Payment Method", "Amount", "Note"])
-    for e in expenses:
-        writer.writerow([
-            e.expense_date.isoformat(),
-            e.get_transaction_type_display(),
-            e.title,
-            e.category.name if e.category else "Uncategorized",
-            e.get_payment_method_display(),
-            money(e.amount),
-            e.note,
-        ])
+
+    for expense in expenses:
+        writer.writerow(
+            [
+                expense.expense_date.isoformat(),
+                expense.get_transaction_type_display(),
+                expense.title,
+                expense.category.name if expense.category else "Uncategorized",
+                expense.get_payment_method_display(),
+                money(expense.amount),
+                expense.note,
+            ]
+        )
+
     return output.getvalue()
 
-
-# ─── PDF builder ──────────────────────────────────────────────────────────────
 
 def build_monthly_report_pdf(report_data, expenses):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=A4,
-        rightMargin=MARGIN,
-        leftMargin=MARGIN,
-        topMargin=MARGIN,
-        bottomMargin=1.6 * cm,
-        title=f"Expense Report – {report_data.get('month_label', report_data['month'])}",
+        pagesize=landscape(letter),
+        rightMargin=0.45 * inch,
+        leftMargin=0.45 * inch,
+        topMargin=0.45 * inch,
+        bottomMargin=0.55 * inch,
     )
-
-    S = _styles()
-    W = PAGE_W - 2 * MARGIN   # usable width
-    story = []
-
-    # ── Header ────────────────────────────────────────────────────────────────
+    styles = _pdf_styles()
     generated_at = timezone.localtime(timezone.now()).strftime("%d %b %Y, %I:%M %p")
-    month_label  = report_data.get("month_label", report_data["month"])
+    balance = Decimal(report_data["balance"])
+    balance_label = "Remaining" if balance >= 0 else "Over Budget"
 
+    story = []
     story.append(
         Table(
-            [[
-                Paragraph("Sora Expense", S["brand"]),
-                Paragraph(
-                    f"Monthly Report<br/>"
-                    f"<font size='9' color='#6B6B6B'>{month_label}</font>",
-                    S["header_right"],
-                ),
-            ]],
-            colWidths=[W * 0.5, W * 0.5],
+            [
+                [
+                    Paragraph("Sora Transaction Report", styles["ReportTitle"]),
+                    Paragraph(
+                        f"Month: {report_data['month']}<br/>Generated: {generated_at}",
+                        styles["ReportMeta"],
+                    ),
+                ]
+            ],
+            colWidths=[6.8 * inch, 3.0 * inch],
             style=[
-                ("VALIGN",       (0, 0), (-1, -1), "BOTTOM"),
-                ("TOPPADDING",   (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING",(0, 0), (-1, -1), 10),
-                ("LEFTPADDING",  (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#111827")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#111827")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 16),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 16),
+                ("TOPPADDING", (0, 0), (-1, -1), 14),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ],
         )
     )
-    story.append(HRFlowable(width=W, thickness=1.2, color=INK, spaceAfter=14))
+    story.append(Spacer(1, 0.22 * inch))
 
-    # ── Summary block ─────────────────────────────────────────────────────────
-    net = Decimal(report_data["net_cash_flow"])
+    story.append(
+        _table(
+            [
+                ["Income", "Expense", "Net Cash Flow", "Wallet Balance", "Transactions"],
+                [
+                    display_money(report_data["total_income"]),
+                    display_money(report_data["total_expense"]),
+                    display_money(report_data["net_cash_flow"]),
+                    display_money(report_data["wallet_balance"]),
+                    str(report_data["transaction_count"]),
+                ],
+            ],
+            [1.96 * inch, 1.96 * inch, 1.96 * inch, 1.96 * inch, 1.96 * inch],
+            styles,
+            kind="summary",
+        )
+    )
+    story.append(Spacer(1, 0.22 * inch))
 
-    summary_pairs = [
-        ("Total Income",    fmt(report_data["total_income"])),
-        ("Total Expenses",  fmt(report_data["total_expense"])),
-        ("Net Cash Flow",   fmt(report_data["net_cash_flow"])),
-        ("Wallet Balance",  fmt(report_data["wallet_balance"])),
-        ("Transactions",    str(report_data["transaction_count"])),
-    ]
-
-    summary_rows = [
+    story.append(Paragraph("Category Breakdown", styles["SectionTitle"]))
+    category_rows = [["Category", "Amount", "Count"]]
+    category_rows.extend(
         [
-            Paragraph(label, S["sum_label"]),
-            Paragraph(value, S["sum_value"]),
+            row["category_name"],
+            display_money(row["total"]),
+            str(row["count"]),
         ]
-        for label, value in summary_pairs
-    ]
-
+        for row in report_data["category_breakdown"]
+    )
+    if len(category_rows) == 1:
+        category_rows.append(["No expenses found", display_money("0.00"), "0"])
     story.append(
-        Table(
-            summary_rows,
-            colWidths=[W * 0.55, W * 0.45],
-            style=[
-                ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING",  (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING",   (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
-                ("LINEBELOW",    (0, 0), (-1, -2), 0.4, RULE),
-            ],
+        _table(
+            category_rows,
+            [5.8 * inch, 2.0 * inch, 2.0 * inch],
+            styles,
+            numeric_columns={1, 2},
         )
     )
-    story.append(Spacer(1, 18))
+    story.append(Spacer(1, 0.2 * inch))
 
-    # ── Category breakdown ────────────────────────────────────────────────────
-    cat_data = report_data["category_breakdown"]
-    story.append(Paragraph("Expenses by Category", S["section"]))
-    story.append(HRFlowable(width=W, thickness=0.5, color=RULE, spaceAfter=6))
+    story.append(Paragraph("Payment Method Breakdown", styles["SectionTitle"]))
+    payment_rows = [["Payment Method", "Amount", "Count"]]
+    payment_rows.extend(
+        [
+            str(row["payment_method"]).title(),
+            display_money(row["total"]),
+            str(row["count"]),
+        ]
+        for row in report_data["payment_method_breakdown"]
+    )
+    if len(payment_rows) == 1:
+        payment_rows.append(["No expenses found", display_money("0.00"), "0"])
+    story.append(
+        _table(
+            payment_rows,
+            [5.8 * inch, 2.0 * inch, 2.0 * inch],
+            styles,
+            numeric_columns={1, 2},
+        )
+    )
+    story.append(Spacer(1, 0.2 * inch))
 
-    if cat_data:
-        total_exp = Decimal(report_data["total_expense"]) or Decimal("1")
-        cat_rows = [[
-            Paragraph("Category", S["th"]),
-            Paragraph("Transactions", S["th_r"]),
-            Paragraph("Share", S["th_r"]),
-            Paragraph("Amount", S["th_r"]),
-        ]]
-        for r in cat_data:
-            pct = Decimal(r["total"]) / total_exp * 100
-            cat_rows.append([
-                Paragraph(escape(r["category_name"]), S["td"]),
-                Paragraph(str(r["count"]), S["td_r"]),
-                Paragraph(f"{pct:.1f}%", S["td_r"]),
-                Paragraph(fmt(r["total"]), S["td_r"]),
-            ])
-        story.append(_plain_table(cat_rows, [W * 0.45, W * 0.18, W * 0.14, W * 0.23]))
-    else:
-        story.append(Paragraph("No expense transactions this month.", S["empty"]))
+    story.append(Paragraph("Transaction Table", styles["SectionTitle"]))
+    expense_rows = [["Date", "Type", "Title", "Category", "Method", "Amount", "Note"]]
+    expense_rows.extend(
+        [
+            expense.expense_date.isoformat(),
+            expense.get_transaction_type_display(),
+            expense.title,
+            expense.category.name if expense.category else "Uncategorized",
+            expense.get_payment_method_display(),
+            display_money(expense.amount),
+            expense.note or "",
+        ]
+        for expense in expenses
+    )
+    if len(expense_rows) == 1:
+        expense_rows.append(["No transactions found", "", "", "", "", display_money("0.00"), ""])
+    story.append(
+        _table(
+            expense_rows,
+            [0.8 * inch, 0.7 * inch, 1.45 * inch, 1.25 * inch, 1.0 * inch, 1.05 * inch, 3.55 * inch],
+            styles,
+            numeric_columns={5},
+        )
+    )
 
-    story.append(Spacer(1, 18))
-
-    # ── Payment method breakdown ──────────────────────────────────────────────
-    pm_data = report_data["payment_method_breakdown"]
-    story.append(Paragraph("Expenses by Payment Method", S["section"]))
-    story.append(HRFlowable(width=W, thickness=0.5, color=RULE, spaceAfter=6))
-
-    if pm_data:
-        total_exp = Decimal(report_data["total_expense"]) or Decimal("1")
-        pm_rows = [[
-            Paragraph("Method", S["th"]),
-            Paragraph("Transactions", S["th_r"]),
-            Paragraph("Share", S["th_r"]),
-            Paragraph("Amount", S["th_r"]),
-        ]]
-        for r in pm_data:
-            pct = Decimal(r["total"]) / total_exp * 100
-            pm_rows.append([
-                Paragraph(str(r["payment_method"]).upper(), S["td"]),
-                Paragraph(str(r["count"]), S["td_r"]),
-                Paragraph(f"{pct:.1f}%", S["td_r"]),
-                Paragraph(fmt(r["total"]), S["td_r"]),
-            ])
-        story.append(_plain_table(pm_rows, [W * 0.45, W * 0.18, W * 0.14, W * 0.23]))
-    else:
-        story.append(Paragraph("No expense transactions this month.", S["empty"]))
-
-    story.append(Spacer(1, 18))
-
-    # ── Income breakdown (only when present) ──────────────────────────────────
-    income_cat = report_data["income_category_breakdown"]
-    if income_cat:
-        story.append(Paragraph("Income by Category", S["section"]))
-        story.append(HRFlowable(width=W, thickness=0.5, color=RULE, spaceAfter=6))
-        total_inc = Decimal(report_data["total_income"]) or Decimal("1")
-        inc_rows = [[
-            Paragraph("Category", S["th"]),
-            Paragraph("Transactions", S["th_r"]),
-            Paragraph("Share", S["th_r"]),
-            Paragraph("Amount", S["th_r"]),
-        ]]
-        for r in income_cat:
-            pct = Decimal(r["total"]) / total_inc * 100
-            inc_rows.append([
-                Paragraph(escape(r["category_name"]), S["td"]),
-                Paragraph(str(r["count"]), S["td_r"]),
-                Paragraph(f"{pct:.1f}%", S["td_r"]),
-                Paragraph(fmt(r["total"]), S["td_r"]),
-            ])
-        story.append(_plain_table(inc_rows, [W * 0.45, W * 0.18, W * 0.14, W * 0.23]))
-        story.append(Spacer(1, 18))
-
-    # ── Transaction ledger ────────────────────────────────────────────────────
-    story.append(Paragraph("Transaction Ledger", S["section"]))
-    story.append(HRFlowable(width=W, thickness=0.5, color=RULE, spaceAfter=6))
-
-    expense_list = list(expenses)
-    if expense_list:
-        tx_rows = [[
-            Paragraph("Date",     S["th"]),
-            Paragraph("Title",    S["th"]),
-            Paragraph("Category", S["th"]),
-            Paragraph("Method",   S["th"]),
-            Paragraph("Type",     S["th_r"]),
-            Paragraph("Amount",   S["th_r"]),
-        ]]
-        for e in expense_list:
-            is_income = e.transaction_type == Expense.TransactionType.INCOME
-            prefix    = "+" if is_income else ""
-            amt_style = S["td_inc"] if is_income else S["td_r"]
-            tx_rows.append([
-                Paragraph(e.expense_date.strftime("%d %b"), S["td"]),
-                Paragraph(escape(e.title or "—"), S["td"]),
-                Paragraph(escape(e.category.name if e.category else "—"), S["td"]),
-                Paragraph(escape(e.get_payment_method_display()), S["td"]),
-                Paragraph(e.get_transaction_type_display(), S["td_r"]),
-                Paragraph(f"{prefix}{fmt(e.amount)}", amt_style),
-            ])
-        story.append(_plain_table(
-            tx_rows,
-            [W * 0.11, W * 0.28, W * 0.20, W * 0.13, W * 0.12, W * 0.16],
-            alt_rows=True,
-        ))
-    else:
-        story.append(Paragraph("No transactions recorded this month.", S["empty"]))
-
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    doc.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
 
 
-# ─── table helper ─────────────────────────────────────────────────────────────
-
-def _plain_table(rows, col_widths, alt_rows=False):
-    style = [
-        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING",  (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING",   (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
-        # Header row — just a bottom rule, no background
-        ("LINEBELOW",    (0, 0), (-1, 0), 0.8, INK),
-        # Outer box
-        ("BOX",          (0, 0), (-1, -1), 0.4, RULE),
-    ]
-    if alt_rows:
-        for i in range(2, len(rows), 2):
-            style.append(("BACKGROUND", (0, i), (-1, i), ROW_ALT))
-    t = Table(rows, colWidths=col_widths, repeatRows=1)
-    t.setStyle(TableStyle(style))
-    return t
-
-
-# ─── styles ───────────────────────────────────────────────────────────────────
-
-def _styles():
+def _pdf_styles():
     base = getSampleStyleSheet()
-
-    def add(name, **kw):
-        base.add(ParagraphStyle(name=name, parent=base["Normal"], **kw))
-
-    add("brand",
-        fontName="Helvetica-Bold", fontSize=16, leading=20, textColor=INK)
-
-    add("header_right",
-        fontName="Helvetica-Bold", fontSize=11, leading=15,
-        textColor=INK, alignment=TA_RIGHT)
-
-    add("sum_label",
-        fontSize=9, leading=12, textColor=INK_MUTED)
-
-    add("sum_value",
-        fontName="Helvetica-Bold", fontSize=9, leading=12,
-        textColor=INK, alignment=TA_RIGHT)
-
-    add("section",
-        fontName="Helvetica-Bold", fontSize=9, leading=12,
-        textColor=INK, spaceBefore=2, spaceAfter=0)
-
-    add("th",
-        fontName="Helvetica-Bold", fontSize=7.5, leading=10,
-        textColor=INK)
-
-    add("th_r",
-        fontName="Helvetica-Bold", fontSize=7.5, leading=10,
-        textColor=INK, alignment=TA_RIGHT)
-
-    add("td",
-        fontSize=7.5, leading=10, textColor=INK)
-
-    add("td_r",
-        fontSize=7.5, leading=10, textColor=INK, alignment=TA_RIGHT)
-
-    add("td_inc",
-        fontSize=7.5, leading=10, textColor=INK, alignment=TA_RIGHT,
-        fontName="Helvetica-Bold")
-
-    add("empty",
-        fontSize=8, leading=12, textColor=INK_FAINT)
-
+    base.add(
+        ParagraphStyle(
+            name="ReportTitle",
+            parent=base["Title"],
+            alignment=0,
+            fontName="Helvetica-Bold",
+            fontSize=22,
+            leading=26,
+            textColor=colors.white,
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="ReportMeta",
+            parent=base["Normal"],
+            alignment=TA_RIGHT,
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#d1d5db"),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="SectionTitle",
+            parent=base["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=16,
+            spaceAfter=6,
+            textColor=colors.HexColor("#111827"),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="TableHeader",
+            parent=base["Normal"],
+            alignment=TA_CENTER,
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=colors.white,
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="TableCell",
+            parent=base["Normal"],
+            fontSize=8,
+            leading=10,
+            textColor=colors.HexColor("#111827"),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="TableCellRight",
+            parent=base["TableCell"],
+            alignment=TA_RIGHT,
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="SummaryHeader",
+            parent=base["Normal"],
+            alignment=TA_CENTER,
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=colors.HexColor("#4b5563"),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="SummaryValue",
+            parent=base["Normal"],
+            alignment=TA_CENTER,
+            fontName="Helvetica-Bold",
+            fontSize=13,
+            leading=16,
+            textColor=colors.HexColor("#111827"),
+        )
+    )
     return base
 
 
-# ─── footer ───────────────────────────────────────────────────────────────────
+def _table(rows, col_widths, styles, numeric_columns=None, kind="standard"):
+    numeric_columns = numeric_columns or set()
+    paragraph_rows = []
 
-def _footer(canvas, doc):
+    for row_index, row in enumerate(rows):
+        paragraph_row = []
+        for col_index, value in enumerate(row):
+            if kind == "summary":
+                style_name = "SummaryHeader" if row_index == 0 else "SummaryValue"
+            elif row_index == 0:
+                style_name = "TableHeader"
+            elif col_index in numeric_columns:
+                style_name = "TableCellRight"
+            else:
+                style_name = "TableCell"
+            paragraph_row.append(Paragraph(escape(str(value)), styles[style_name]))
+        paragraph_rows.append(paragraph_row)
+
+    table = Table(paragraph_rows, colWidths=col_widths, repeatRows=0 if kind == "summary" else 1)
+    table_style = [
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e5e7eb")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+
+    if kind == "summary":
+        table_style.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f9fafb")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.4, colors.HexColor("#e5e7eb")),
+            ]
+        )
+    else:
+        table_style.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.HexColor("#f9fafb")],
+                ),
+            ]
+        )
+
+    table.setStyle(TableStyle(table_style))
+    return table
+
+
+def _draw_footer(canvas, doc):
     canvas.saveState()
-    y = 1.0 * cm
-    canvas.setStrokeColor(RULE)
+    canvas.setStrokeColor(colors.HexColor("#e5e7eb"))
     canvas.setLineWidth(0.5)
-    canvas.line(doc.leftMargin, y, doc.pagesize[0] - doc.rightMargin, y)
-    canvas.setFillColor(INK_FAINT)
-    canvas.setFont("Helvetica", 7)
-    canvas.drawString(doc.leftMargin, y - 5 * mm, "Sora Expense")
+    canvas.line(doc.leftMargin, 0.42 * inch, doc.pagesize[0] - doc.rightMargin, 0.42 * inch)
+    canvas.setFillColor(colors.HexColor("#6b7280"))
+    canvas.setFont("Helvetica", 8)
+    canvas.drawString(doc.leftMargin, 0.25 * inch, "Sora Expense")
     canvas.drawRightString(
-        doc.pagesize[0] - doc.rightMargin, y - 5 * mm,
+        doc.pagesize[0] - doc.rightMargin,
+        0.25 * inch,
         f"Page {doc.page}",
     )
     canvas.restoreState()
