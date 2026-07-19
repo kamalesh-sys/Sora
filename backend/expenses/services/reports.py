@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
@@ -43,7 +43,7 @@ def parse_month_range(value):
 def get_monthly_transactions(start, end, user=None):
     queryset = Expense.objects.select_related("category").filter(
         expense_date__range=(start, end)
-    )
+    ).exclude(expense_type=Expense.ExpenseType.SHARED)
     if user is not None:
         queryset = queryset.filter(user=user, household__isnull=True)
     return queryset

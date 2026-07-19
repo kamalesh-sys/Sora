@@ -155,6 +155,13 @@ class PersonViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Person.objects.filter(owner=self.request.user).order_by("name", "id")
 
+    def perform_destroy(self, instance):
+        # Delete expenses involving this person
+        Expense.objects.filter(Q(shares__person=instance) | Q(paid_by_person=instance)).distinct().delete()
+        # Delete settlements involving this person
+        Settlement.objects.filter(Q(from_person=instance) | Q(to_person=instance)).delete()
+        super().perform_destroy(instance)
+
     @action(detail=False, methods=["post"], url_path="invite")
     def invite(self, request):
         serializer = CreatePeopleInvitationSerializer(data=request.data, context={"request": request})
@@ -605,9 +612,10 @@ def dashboard_summary(request):
         previous_start.month,
         parse_month_range(previous_start.strftime("%Y-%m"))[1].day,
     )
+    # Exclude people-debt (shared) entries from both recent lists
     recent_transactions = visible_expenses_for_user(request.user).filter(
         expense_date__range=(start, end)
-    ).order_by("-expense_date", "-created_at")[:limit]
+    ).exclude(expense_type=Expense.ExpenseType.SHARED).order_by("-expense_date", "-created_at")[:limit]
     serialized_transactions = ExpenseSerializer(
         recent_transactions,
         many=True,
@@ -616,7 +624,7 @@ def dashboard_summary(request):
     recent_expenses = visible_expenses_for_user(request.user).filter(
         expense_date__range=(start, end),
         transaction_type=Expense.TransactionType.EXPENSE,
-    ).order_by("-expense_date", "-created_at")[:limit]
+    ).exclude(expense_type=Expense.ExpenseType.SHARED).order_by("-expense_date", "-created_at")[:limit]
 
     return Response(
         {
