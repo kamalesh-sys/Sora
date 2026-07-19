@@ -844,6 +844,8 @@ def export_pdf(request):
     expenses = list(get_monthly_transactions(start, end, user=request.user))
     report_data = get_monthly_report_data(start, end, user=request.user)
     pdf_content = build_monthly_report_pdf(report_data, expenses)
+    month_label = start.strftime("%B %Y")
+    filename = f"Sora Expense – {month_label}.pdf"
     response = HttpResponse(pdf_content, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="sora-transaction-report-{start:%Y-%m}.pdf"'
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
