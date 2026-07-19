@@ -3,6 +3,7 @@
     "name": "Sora Expense",
     "slug": "sora-expense",
     "version": "1.0.0",
+    "icon": "./src/assets/sora_og_logo.png",
     "newArchEnabled": false,
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -15,10 +16,15 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "icon": "./src/assets/sora_og_logo.png"
     },
     "android": {
-      "package": "com.soraexpense.app"
+      "package": "com.soraexpense.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/sora_og_logo.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "plugins": [
       "expo-secure-store",
