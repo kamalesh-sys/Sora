@@ -62,7 +62,7 @@ def get_monthly_income(start, end, user=None):
 
 
 def get_wallet_balance(user=None):
-    transactions = Expense.objects.all()
+    transactions = Expense.objects.exclude(expense_type=Expense.ExpenseType.SHARED)
     income = transactions.filter(transaction_type=Expense.TransactionType.INCOME)
     expenses = transactions.filter(transaction_type=Expense.TransactionType.EXPENSE)
     if user is not None:
