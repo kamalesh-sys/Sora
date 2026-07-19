@@ -1,84 +1,78 @@
-import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
-import LottieView from "lottie-react-native";
-
-import { useAppSettings } from "../context/AppSettingsContext";
-import { useSoraResponsive } from "../theme/responsive";
-
-const loadingMessages = [
-  "Opening Sora Expense...",
-  "Hmm, this is taking a tiny minute eh...",
-  "Counting invisible coins. Very serious work.",
-  "Still loading. Sora is putting things in neat little boxes.",
-];
 
 export function StartupLoadingScreen() {
-  const { colors } = useAppSettings();
-  const responsive = useSoraResponsive();
-  const [messageIndex, setMessageIndex] = useState(0);
+  const bounce1 = useRef(new Animated.Value(0)).current;
+  const bounce2 = useRef(new Animated.Value(0)).current;
+  const bounce3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const timers = [
-      setTimeout(() => setMessageIndex(1), 3500),
-      setTimeout(() => setMessageIndex(2), 8000),
-      setTimeout(() => setMessageIndex(3), 13000),
-    ];
+    const runAnimation = () => {
+      bounce1.setValue(0);
+      bounce2.setValue(0);
+      bounce3.setValue(0);
 
-    return () => {
-      timers.forEach(clearTimeout);
+      Animated.sequence([
+        Animated.stagger(150, [
+          Animated.sequence([
+            Animated.timing(bounce1, { toValue: -12, duration: 250, useNativeDriver: true }),
+            Animated.timing(bounce1, { toValue: 0, duration: 250, useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(bounce2, { toValue: -12, duration: 250, useNativeDriver: true }),
+            Animated.timing(bounce2, { toValue: 0, duration: 250, useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(bounce3, { toValue: -12, duration: 250, useNativeDriver: true }),
+            Animated.timing(bounce3, { toValue: 0, duration: 250, useNativeDriver: true }),
+          ]),
+        ]),
+        Animated.delay(300),
+      ]).start(() => runAnimation());
     };
+
+    runAnimation();
   }, []);
 
-  const illustrationSize = useMemo(() => {
-    if (responsive.tiny) {
-      return 120;
-    }
-    if (responsive.compact) {
-      return 140;
-    }
-    return 160;
-  }, [responsive.compact, responsive.tiny]);
-
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, paddingHorizontal: responsive.dashboard.contentPaddingX }]}>
-      <View style={styles.animationWrap}>
-        <LottieView
-          autoPlay
-          loop
-          source={require("../../assets/abstract-square.json")}
-          style={{ width: illustrationSize, height: illustrationSize }}
-        />
+    <View style={styles.screen}>
+      <Text style={styles.title}>Sora</Text>
+      <View style={styles.dotsContainer}>
+        <Animated.View style={[styles.dot, { transform: [{ translateY: bounce1 }] }]} />
+        <Animated.View style={[styles.dot, { transform: [{ translateY: bounce2 }] }]} />
+        <Animated.View style={[styles.dot, { transform: [{ translateY: bounce3 }] }]} />
       </View>
-
-      <Text style={[styles.title, { color: colors.text }]}>Sora Expense</Text>
-      <Text style={[styles.message, { color: colors.muted }]}>{loadingMessages[messageIndex]}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  animationWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  message: {
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 22,
-    marginTop: 8,
-    maxWidth: 320,
-    minHeight: 48,
-    textAlign: "center",
-  },
   screen: {
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
+    backgroundColor: "#0A0B0D",
   },
   title: {
-    fontSize: 30,
+    fontSize: 44,
     fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: -1,
+  },
+  dotsContainer: {
+    flexDirection: "row",
+    marginTop: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    height: 24,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 4,
+    opacity: 0.85,
   },
 });

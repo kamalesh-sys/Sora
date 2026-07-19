@@ -303,6 +303,8 @@ export function PeopleScreen({ navigation }: Props) {
 
   const confirmDeletePerson = () => {
     if (!selectedPerson) return;
+    // Capture person before sheet may close and null out selectedPerson
+    const personToDelete = selectedPerson;
     Alert.alert(t("Remove person"), t("This removes the person from your people list. Existing linked dues may be affected."), [
       { text: t("Cancel"), style: "cancel" },
       {
@@ -312,7 +314,7 @@ export function PeopleScreen({ navigation }: Props) {
           setSaving(true);
           setError("");
           try {
-            await deletePerson(selectedPerson.id);
+            await deletePerson(personToDelete.id);
             setSelectedPerson(null);
             await load();
           } catch {

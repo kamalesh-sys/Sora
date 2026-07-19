@@ -324,6 +324,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         if self.basename == "expense" and not params.get("transaction_type"):
             queryset = queryset.filter(transaction_type=Expense.TransactionType.EXPENSE)
 
+        # Exclude people-debt entries (expense_type=shared) from main lists by default.
+        # They are only visible in the People screen which calls the history action directly.
+        if not params.get("expense_type"):
+            queryset = queryset.exclude(expense_type=Expense.ExpenseType.SHARED)
+
         if month := params.get("month"):
             try:
                 start, end = parse_month_range(month)

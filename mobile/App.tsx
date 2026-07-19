@@ -22,6 +22,7 @@ import { FeedbackProvider } from "./src/context/FeedbackContext";
 import { AppErrorBoundary } from "./src/components/AppErrorBoundary";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/RootNavigator";
+import { client } from "./src/services/apiClient";
 
 const linking: LinkingOptions<RootStackParamList> = {
   config: {
@@ -118,24 +119,56 @@ function BootGate({
   themeMode: "light" | "dark";
 }) {
   const { initializing } = useAuth();
-  const statusBarStyle = themeMode === "dark" ? "light" : "dark";
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  const [apiReady, setApiReady] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 2000);
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 
-  if (!fontsLoaded || !settingsReady || initializing || !minTimeElapsed) {
+  useEffect(() => {
+    let active = true;
+    let retryTimer: NodeJS.Timeout;
+
+    const checkHealth = async () => {
+      try {
+        const response = await client.get("/health/");
+        if (response.data && response.data.status === "ok") {
+          if (active) {
+            setApiReady(true);
+          }
+          return;
+        }
+      } catch (err) {
+        // failed or timed out, will retry
+      }
+      
+      if (active) {
+        retryTimer = setTimeout(checkHealth, 4000);
+      }
+    };
+
+    checkHealth();
+
+    return () => {
+      active = false;
+      clearTimeout(retryTimer);
+    };
+  }, []);
+
+  if (!fontsLoaded || !settingsReady || initializing || !minTimeElapsed || !apiReady) {
     return (
       <>
-        <StatusBar style={statusBarStyle} />
+        <StatusBar style="light" />
         <StartupLoadingScreen />
       </>
     );
   }
+
+  const statusBarStyle = themeMode === "dark" ? "light" : "dark";
 
   return (
     <NavigationContainer
