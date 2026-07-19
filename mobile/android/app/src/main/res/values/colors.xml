@@ -4,4 +4,5 @@
   <color name="colorPrimaryDark">#ffffff</color>
   <color name="navigationBarColor">#FFFFFF</color>
   <color name="sora_launcher_background">#2563EB</color>
+  <color name="iconBackground">#FEFDFD</color>
 </resources>
